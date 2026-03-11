@@ -1,17 +1,5 @@
 Idiotbox with New Module Features
 
-CURRENT NEW FEATURES
-(
+Planning on Rewriting A lot of the original code. This will no longer be for professional "use" and will be for Raw Power 
 
-Actual Fake Angles
-
-Show Angles
-
-Fakelag Fix
-
-Freestanding
-
-Lag Exploit(Desynculator)
-
-
-)
+Goodbye Undetectable Hello top 5 Rage Cheat! (EST Mid-Late 2026)
