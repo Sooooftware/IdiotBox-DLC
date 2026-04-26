@@ -1,4 +1,4 @@
-  //----IdiotBox v7.2.b2----//
+  //----IdiotBox v7.3.b2----//
  //--------By Phizz--------//
 //------------------------//
 
@@ -29,11 +29,11 @@ local allents = ents.GetAll()
 !!FUTURE UPDATE!! ]]--
 
 local folder = "IdiotBox"
-local version = "v7.2.b2"
+local version = "v7.3.b2"
 
 local menukeydown, frame, menuopen, mousedown, candoslider, drawlast, notyetselected, fa, aa, aimtarget, aimignore
 local optimized, manual, manualpressed, tppressed, tptoggle, applied, windowopen, pressed, usespam, displayed, blackscreen, footprints, loopedprops = false
-local ib, drawnents, prioritylist, ignorelist, visible, dists, cones, traitors, tweps = {}, {}, {}, {}, {}, {}, {}, {}, {}, {}
+local ib, drawnents, prioritylist, ignorelist, visible, dists, cones = {}, {}, {}, {}, {}, {}, {}, {}
 
 local toggler, playerkills, namechangetime, circlestrafeval, timeHoldingSpaceOnGround, servertime, fakelagticks, fakelagfactor = 0, 0, 0, 0, 0, 0, 0, 0
 local menutextcol, bgmenucol, bordercol, teamvisualscol, enemyvisualscol, prioritytargetscol, ignoredtargetscol, miscvisualscol, teamchamscol, enemychamscol, crosshaircol, viewmodelcol = Color(255, 255, 255), Color(30, 30, 37), Color(0, 155, 255), Color(255, 255, 255), Color(255, 255, 255), Color(255, 0, 100), Color(175, 175, 175), Color(0, 255, 255), Color(0, 255, 255), Color(0, 255, 255), Color(0, 235, 255), Color(0, 235, 255)
@@ -46,16 +46,10 @@ local clSideSpeedCvar = GetConVar("cl_sidespeed")
 local forwardspeedval, sidespeedval = 10000, 10000
 
 
-
-function ib.TIME_TO_TICKS(time)
-	return math.floor(0.5 + time / engine.TickInterval())
-end
-
+local fakeAngles, realAngles = {ox = 0, oy = 0}, {ox = 0, oy = 0}
+local aaply1, aaply2 = NULL, NULL
 local old_yaw = 0.0
 local ox, oy = - 181, 0
-
-local aaply1 = NULL
-local aaply2 = NULL
 
 local mat = GetRenderTarget("mat"..os.time(), ScrW(), ScrH())
 local blur = Material("pp/blurscreen")
@@ -76,10 +70,17 @@ gameevent.Listen("player_disconnect")
 gameevent.Listen("player_hurt")
 
 CreateClientConVar("ib_changename", "www.IB4G.net | Cry, dog!", true, false)
+CreateClientConVar("ib_customdisconnect", "VAC banned from secure server", true, false)
 
 concommand.Add("ib_usespam", function()
     usespam = !usespam
 end)
+
+
+function ib.timeToTicks(time)
+	return math.floor(0.5 + time / engine.TickInterval())
+end
+
 
 surface.CreateFont("VisualsFont", {font = "Tahoma", size = 12, antialias = false, outline = true})
 surface.CreateFont("VisualsFont2", {font = "Tahoma", size = 11, antialias = false, outline = true})
@@ -102,7 +103,6 @@ ib.chamsmat4 = CreateMaterial("flatmat2", "UnLitGeneric", {["$ignorez"] = 0, ["$
 ib.chamsmat5 = CreateMaterial("wiremat1", "UnLitGeneric", {["$ignorez"] = 1, ["$wireframe"] = 1, })
 ib.chamsmat6 = CreateMaterial("wiremat2", "UnLitGeneric", {["$ignorez"] = 0, ["$wireframe"] = 1, })
 
-
 ib.anticheatNames = {"QAC", "qac", "CAC", "cac", "SAC", "sac", "DAC", "dac", "ZAC", "zac", "TAC", "tac", "LSAC", "lsac", "simplicity", "Simplicity", "ZARP", "Zarp", "zarp", "swiftAC", "swiftac", "SwiftAC", "Swiftac", "simplac", "simplAC", "SimplAC", "Simplac", "memeac", "Memeac", "MemeAC", "memeAC", "SMAC", "smac", "MAC", "mac", "GAC", "gac", "GS", "gs", "GTS", "gts", "AE", "ae", "CardinalLib", "cardinallib", "cardinalLib", "Cardinallib"}
 ib.configFiles = {"config1.txt", "config2.txt", "config3.txt", "config4.txt", "config5.txt", "config6.txt", "config7.txt", "config8.txt", "config9.txt", "config10.txt"}
 ib.configOptions = {"Legit Config", "Rage Config", "HvH Config", "Misc Config #1", "Misc Config #2", "Misc Config #3", "Misc Config #4", "Misc Config #5", "Misc Config #6", "Misc Config #7"}
@@ -112,7 +112,8 @@ ib.headshot2 = {"player/headshot1.wav", "player/headshot2.wav", "player/headshot
 ib.metal = {"phx/hmetal1.wav", "phx/hmetal2.wav", "phx/hmetal3.wav",}
 
 ib.NetMessages = {Buildmode = {"BuildMode", "buildmode", "_Kyle_Buildmode"}, God = {"HasGodMode", "has_god", "god_mode", "ugod"}, Protected = {"LibbyProtectedSpawn", "SH_SZ.Safe", "spawn_protect", "InSpawnZone"}}
-ib.frpressed, ib.frtoggle = false
+ib.frpressed, ib.frtoggle, ib.desyncpressed, ib.desynctoggle, ib.attackLastTick, ib.debounceMultifire = false
+ib.tickRate = math.floor(1 / engine.TickInterval()) 
 ib.spread = {}
 
 ib.propval = 0
@@ -202,10 +203,11 @@ local options = {
 			{""}, 
 		}, 
 		{
-          	{"Others", 261, 444, 232, 130, 218}, 
+          	{"Others", 261, 444, 232, 152, 218}, 
 			{"Feature Tooltips", "Checkbox", true, 78}, -- Enabled by default
 			{"Apply Custom Name", "Button", false, 92}, 
 			{"Print Changelog", "Button", "", 92}, 
+			{"Custom Disconnect", "Button", "", 92}, 
 			{"Unload Cheat", "Button", "", 92}, 
 		}, 
 		{
@@ -225,9 +227,12 @@ local options = {
 			{""}, 
 		}, 
 		{
-			{"Miscellaneous", 506, 354, 232, 144, 218}, 
+			{"Miscellaneous", 506, 354, 232, 220, 218}, 
 			{"Optimize Game", "Checkbox", false, 78}, 
 			{"Spectator Mode", "Checkbox", false, 78}, 
+			{"Ping Spoofer", "Checkbox", false, 78}, 
+			{"Spoof Multiplier:", "Slider", 0, 10, 156}, 
+			{""}, 
 			{"Anti-AFK", "Checkbox", false, 78}, 
 			{"Anti-Ads", "Checkbox", false, 78}, 
 			{"Anti-Blind", "Checkbox", false, 78}, 
@@ -291,10 +296,11 @@ local options = {
 			{""}, 
 		}, 
 		{
-			{"Miscellaneous", 506, 20, 232, 370, 218}, 
+			{"Miscellaneous", 506, 20, 232, 398, 218}, 
 			{"Remove Weapon Recoil", "Checkbox", false, 78}, 
 			{"Remove Bullet Spread", "Checkbox", false, 78}, 
 			{"Projectile Prediction", "Checkbox", false, 78}, 
+			{"Multi-Tap", "Checkbox", false, 78}, 
 			{"Auto Reload", "Checkbox", false, 78}, 
 			{"Rapid Fire:", "Selection", "Off", {"Off", "Primary Fire", "Alt Fire"}, 92}, 
 			{""}, 
@@ -310,17 +316,19 @@ local options = {
 	}, 
 	["Hack vs. Hack"] = {
 		{
-			{"Anti-Aim", 16, 20, 232, 605, 218}, 
+			{"Anti-Aim", 16, 20, 232, 655, 218}, 
 			{"Enabled", "Checkbox", false, 78}, 
 			{"Disable in Noclip", "Checkbox", true, 78}, -- Enabled by default
 			{"Disable in 'Use' Toggle", "Checkbox", true, 78}, -- Enabled by default
 			{"Detect Walls", "Checkbox", false, 78}, 
 			{"Lock View", "Checkbox", false, 78}, 
-			{"Mode:", "Selection", "Default", {"Default", "Static", "Distance Adapt", "Crosshair Adapt"}, 92}, 
+			{"Show Angles", "Checkbox", false, 78}, 
+			{"Mode:", "Selection", "Default", {"Default", "Static", "Follow Target VIA Distance", "Follow Target VIA Crosshair"}, 92}, 
 			{""}, 
-			{"Pitch:", "Selection", "Off", {"Off", "Down", "Up", "Center", "Fake-Down", "Fake-Up", "Jitter", "Semi-Jitter Down", "Semi-Jitter Up", "Emotion", "Spinbot"}, 92}, 
+			{"Pitch:", "Selection", "Off", {"Off", "Down", "Up", "Center", "Fake-Down", "Fake-Fake-Down", "Fake-Up", "Jitter", "Semi-Jitter Down", "Semi-Jitter Up", "Emotion", "Spinbot"}, 92}, 
 			{""}, 
-			{"Yaw:", "Selection", "Off", {"Off", "Forwards", "Backwards", "Sideways", "Fake-Forwards", "Fake-Backwards", "Fake-Sideways", --[["Fake Angles",]] "Jitter", "Backwards Jitter", "Sideways Jitter", "Semi-Jitter", "Back Semi-Jitter", "Side Semi-Jitter", "Side Switch", "Emotion", "Spinbot"}, 92}, 
+			{"Fake-Invert Pitch", "Checkbox", false, 78}, 
+			{"Yaw:", "Selection", "Off", {"Off", "Forwards", "Backwards", "Sideways", "Tank AA", "Fake-Forwards", "Fake-Backwards", "Fake-Sideways", --[["Fake Angles",]] "Jitter", "Backwards Jitter", "Sideways Jitter", "Semi-Jitter", "Back Semi-Jitter", "Side Semi-Jitter", "Side Switch", "Emotion", "Spinbot"}, 92}, 
 			{""}, 
 			{"Anti-Aim Direction:", "Selection", "Left", {"Left", "Right", "Manual Switch"}, 92}, 
 			{""}, 
@@ -336,7 +344,7 @@ local options = {
 			{""}, 
 		}, 
 		{
-			{"Resolver", 261, 20, 232, 200, 218}, 
+			{"Resolver", 506, 20, 232, 200, 218}, 
 			{"Enabled", "Checkbox", false, 78}, 
 			{"Priority Targets Only", "Checkbox", false, 78}, 
 			{"Pitch:", "Selection", "Off", {"Off", "Down", "Up", "Center", "Invert", "Random", "Auto"}, 92}, 
@@ -345,20 +353,16 @@ local options = {
 			{""}, 
 			{"Emote Resolver", "Checkbox", false, 78}, 
 		}, 
-                {
-			{"Miscellaneous", 261, 235, 232, 120, 218}, 
-			{"Show Angles", "Checkbox", false, 78}, 
-                        {"Free Standing", "Checkbox", false, 78}, 
-                        {"Fakelag Fix", "Checkbox", false, 78},
-                        {"Lag Exploit", "Checkbox", false, 78},
-		},
 		{
-			{"Fake Lag", 506, 20, 232, 180, 218}, 
+			{"Fake Lag", 261, 20, 232, 250, 218}, 
 			{"Enabled", "Checkbox", false, 78}, 
 			{"Disable on Attack", "Checkbox", false, 78}, 
 			{"Lag Type:", "Selection", "Normal", {"Normal", "Adaptive"}, 92}, 
 			{""}, 
 			{"Lag Factor:", "Slider", 21, 21, 156}, 
+			{""}, 
+			{"Lag Desync", "Checkbox", false, 78}, 
+			{"Lag Desync Key:", "Toggle", 0, 92, 0}, 
 			{""}, 
 		}, 
 	}, 
@@ -639,7 +643,7 @@ local options = {
 			{"Debug Info X:", "SliderOld", 7, 1920, 92}, 
 			{"Debug Info Y:", "SliderOld", 265, 1080, 92}, 
 			{"Players List X:", "SliderOld", 7, 1920, 92}, 
-			{"Players List Y:", "SliderOld", 444, 1080, 92}, 
+			{"Players List Y:", "SliderOld", 460, 1080, 92}, 
 		}, 
 	}, 
 }
@@ -742,13 +746,13 @@ do
 		surface.PlaySound("buttons/lightswitch2.wav")
 		return
 	end
-	if not file.Exists("lua/bin/gmcl_idiotbox_win64.dll", "MOD") then
+	if not file.Exists("lua/bin/gmcl_zxcmodule_win64.dll", "MOD") then
 		Popup(4.3, "ERROR! Please install all of the modules before initializing IdiotBox.", Color(255, 0, 0))
 		chat.AddText(Color(255, 0, 0), "\n[ERROR LOGS]")
 		chat.AddText(Color(255, 255, 255), "- Missing/ invalid modules (err:03)\n")
 		chat.AddText(Color(255, 0, 0), "Required modules:")
-		if not file.Exists("lua/bin/gmcl_idiotbox_win64.dll", "MOD") then
-			chat.AddText(Color(255, 255, 255), "- gmcl_idiotbox_win64.dll (Main module)")
+		if not file.Exists("lua/bin/gmcl_zxcmodule_win64.dll", "MOD") then
+			chat.AddText(Color(255, 255, 255), "- gmcl_zxcmodule_win64.dll (Main module)")
 		end
 		surface.PlaySound("buttons/lightswitch2.wav")
 		return
@@ -756,7 +760,7 @@ do
 	global.Loaded = true
 end
 
-require("idiotbox")
+require("zxcmodule")
 
 global.bSendPacket = true
 global.unloaded = false
@@ -852,10 +856,10 @@ local function DrawText(w, h, title)
     surface.SetTextColor(menutextcol.r, menutextcol.g, menutextcol.b, gInt("Adjustments", "Others", "Text Opacity:"))
     surface.SetFont("MainFont")
     surface.DrawText(title)
-    if title == "IdiotBox v7.2.b2" then
+    if title == "IdiotBox v7.3.b2" then
         surface.SetTextPos(147, 18 - th / 2)
         surface.SetFont("MainFont2")
-        surface.DrawText("Latest build: November 17th 2024")
+        surface.DrawText("Latest build: November 23rd 2024")
     end
 end
 
@@ -998,6 +1002,8 @@ local function DrawCheckbox(self, w, h, var, maxy, posx, posy, dist)
 			info = "Makes the screen not turn black at any given moment during a round."
 		elseif feat == "Automatically Save" then
 			info = "Saves your current configuration automatically."
+		elseif feat == "Ping Spoofer" then
+			info = "Artificially inflates your ping."
 		elseif feat == "Feature Tooltips" then
 			info = "Detailed information about features will appear here, at the bottom right corner of the menu."
 		elseif feat == "Silent Aim" then
@@ -1057,7 +1063,9 @@ local function DrawCheckbox(self, w, h, var, maxy, posx, posy, dist)
 		elseif feat == "Auto Reload" then
 			info = "Automatically reloads your weapon after firing it."
 		elseif feat == "Disable Interpolation" then
-			info = "Lag exploit, could be used to your advantage. Do not use if unfamiliar."
+			info = "[ DO NOT USE IF UNFAMILIAR!! ]   Disables lag compensation (interpolation), making targets easier to hit, in certain contexts."
+		elseif feat == "Multi-Tap" then
+			info = "Makes your HL2 weapons fire MANY bullets per tick. Must fire rounds individually, semi-auto style. Will only work when shooting manually."
 		elseif feat == "Manipulate Bullet Time" then
 			info = "Creates a tiny delay between each gunshot for better efficiency."
 		elseif feat == "Disable in 'Use' Toggle" then
@@ -1066,16 +1074,12 @@ local function DrawCheckbox(self, w, h, var, maxy, posx, posy, dist)
 			info = "Changes your angles based on your position relative to the world."
 		elseif feat == "Lock View" then
 			info = "Finds optimal angle to cover your head with a different part of the body."
+		elseif feat == "Show Angles" then
+			info = "Draws your real angles (green) and your fake ones (red). Works with Fake Lag enabled."
+		elseif feat == "Fake-Invert Pitch" then
+			info = "Inverts your pitch, faking your angles further. Only works with Fake Lag enabled, and a fake yaw."
 		elseif feat == "Emote Resolver" then
 			info = "Instead of resolving another player's angles, it will make the Aimbot automatically shoot emoters in their torso."
-                elseif feat == "Show Angles" then
-                        info = "Shows your Real and Fake Angles"
-                elseif feat == "Free Standing" then
-                        info = "Makes you move Rapidly when Standing Still."
-                elseif feat == "Fakelag Fix" then
-                        info = "Helps you Aim at Fakelaggers."
-                elseif feat == "Lag Exploit" then
-                        info = "Makes it so aimbotters cant shoot you.Turn on Fakelag and turn it off to initiate it."
 		elseif feat == "Disable on Attack" then
 			info = "Disables fake lagging when shooting to improve accuracy when using this feature."
 		elseif feat == "Skeleton" then
@@ -1194,6 +1198,8 @@ local function DrawCheckbox(self, w, h, var, maxy, posx, posy, dist)
 			info = "Combines walking and spam-crouching."
 		elseif feat == "Air Stuck" then
 			info = "Abuses sequencing in order to freeze you mid-air."
+		elseif feat == "Lag Desync" then
+            info = "[ DO NOT USE IF UNFAMILIAR!! ]   Makes you 'invincible' by desynchronizing your client. Fake Lag will significantly improve it."
 		elseif feat == "Log Kills in Chat" then
 			info = "Logs every kill in chat."
 		end
@@ -1316,7 +1322,7 @@ local function DrawDropdown(self, w, h, var, maxy, posx, posy, dist)
 		elseif feat == "Anti-Aim Direction:" then
 			info = "Choose the Anti-Aim yaw direction."
 		elseif feat == "Style:" then
-			info = "Choose between the classic and the optimized Wallhack styles. The new optimized style is highly recommenidiotbox."
+			info = "Choose between the classic and the optimized Wallhack styles. The new optimized style is highly recommended."
 		elseif feat == "Visibility:" then
 			info = "Choose whether or not to show yourself as well on Wallhack."
 		elseif feat == "Box:" then
@@ -1419,17 +1425,19 @@ local function DrawToggle(self, w, h, var, maxy, posx, posy, dist) -- Thank you 
         surface.DrawRect(posx - 193 + dist + 2, 81 + posy + maxy + 2, size - 3, 14)
         local feat = var[1]
         if feat == "Prop Kill Key:" then
-            info = "Toggle Prop Kill by holding down your desired key."
+            info = "Toggle Prop Kill by holding down your desired key. Press BACKSPACE or ESC to toggle this feature automatically."
         elseif feat == "Toggle Key:" then
-            info = "Toggle this feature by holding down your desired key."
+            info = "Toggle this feature by holding down your desired key. Press BACKSPACE or ESC to toggle this feature automatically."
         elseif feat == "Switch Key:" then
             info = "Switch between Anti-Aim yaw directions by pressing your desired key."
         elseif feat == "Thirdperson Key:" then
-            info = "Switch between firstperson and thirdperson by pressing your desired key."
+            info = "Switch between firstperson and thirdperson by pressing your desired key. Press BACKSPACE or ESC to toggle this feature automatically."
         elseif feat == "Circle Strafe Key:" then
-            info = "Toggle Circle Strafe by holding down your desired key."
+            info = "Toggle Circle Strafe by holding down your desired key. Press BACKSPACE or ESC to toggle this feature automatically."
         elseif feat == "Air Stuck Key:" then
-            info = "Toggle Air Stuck by holding down your desired key."
+            info = "Toggle Air Stuck by holding down your desired key. Press BACKSPACE or ESC to toggle this feature automatically."
+		elseif feat == "Lag Desync Key:" then
+            info = "Switch between enabling and disabling Lag Desync by pressing your desired key. Press BACKSPACE or ESC to toggle this feature automatically."
         end
     end
         if bMouse then
@@ -1490,11 +1498,12 @@ end
 local function Unload()
 	RunConsoleCommand("stopsound")
 	global.unloaded = true
-	local hooksToRemove = {"RenderScene", "ShutDown", "PostDrawViewModel", "PreDrawEffects", "HUDShouldDraw", "Tick", "Think", "CalcViewModelView", "PreDrawSkyBox", "PreDrawViewModel", "PreDrawPlayerHands", "RenderScreenspaceEffects", "player_hurt", "entity_killed", "Move", "EntityFireBullets", "CalcView", "AdjustMouseSensitivity", "ShouldDrawLocalPlayer", "CreateMove", "player_disconnect", "MiscPaint", "PreDrawOpaqueRenderables", "OnPlayerChat",}
+	local hooksToRemove = {"RenderScene", "ShutDown", "PostDrawViewModel", "PreDrawEffects", "HUDShouldDraw", "Tick", "Think", "CalcViewModelView", "PreDrawSkyBox", "PreDrawViewModel", "PreDrawPlayerHands", "RenderScreenspaceEffects", "player_hurt", "entity_killed", "Move", "EntityFireBullets", "PreRender", "CalcView", "AdjustMouseSensitivity", "ShouldDrawLocalPlayer", "CreateMove", "player_disconnect", "HUDPaint", "PreDrawOpaqueRenderables", "OnPlayerChat",}
 	for _, hookName in ipairs(hooksToRemove) do
 		hook.Remove(hookName, hookName)
 	end
 	concommand.Remove("ib_changename")
+	concommand.Remove("ib_customdisconnect")
 	concommand.Remove("ib_usespam")
 	local selectedConfig = gOption("Main Menu", "Configurations", "Configuration:")
 	local configIndex
@@ -1511,7 +1520,7 @@ local function Unload()
 	end
 	me:ConCommand("M9KGasEffect 1 cl_interp 0 cl_interp_ratio 2 cl_updaterate 30")
 	global.bSendPacket = true
-	idiotbox.SetBSendPacket(global.bSendPacket)
+	ded.SetBSendPacket(global.bSendPacket)
 	global.Loaded = false
 	timer.Create("ChatPrint", 0.1, 1, function() Popup(2.5, "Successfully unloaded IdiotBox!", Color(0, 255, 0)) end)
 	timer.Create("PlaySound", 0.1, 1, function() surface.PlaySound("buttons/lightswitch2.wav") end)
@@ -1519,7 +1528,7 @@ end
 
 function ib.Changelog() -- Ran out of local variables, again
 	print("===============================================================================================\n\n")
-	print("IdiotBox v7.2.b2 GENERAL BUGFIXES")
+	print("IdiotBox v7.3.b2 GENERAL BUGFIXES")
 	print("")
 	print("Please note: This changelog includes bugfixes from previous updates as well.")
 	print("\n")
@@ -1539,6 +1548,7 @@ function ib.Changelog() -- Ran out of local variables, again
 	print("- Fixed toggle keys glitching out and working improperly;")
 	print("- Fixed key binds getting stuck, seemingly at random times;")
 	print("- Fixed 3D Box and Hitbox rendering issues;")
+	print("- Fixed Traitor Finder logs not showing up;")
 	print("- Fixed colliding options in the drop-down selecion tabs;")
 	print("- Fixed extreme bug where the anti-screengrabber would make you run out of VRAM and crash your system;")
 	print("- Fixed Bunny Hop and Auto Strafe breaking Free Roaming and breaking player movement when in water;")
@@ -1559,6 +1569,7 @@ function ib.Changelog() -- Ran out of local variables, again
 	print("- Fixed Cheater Callout clearing chat when it should not;")
 	print("- Fixed Triggerbot Smooth Aim slowing down your overall mouse speed;")
 	print("- Fixed Witness Finder not working properly;")
+	print("- Fixed Air Stuck freezing your client when paired with Fake Lag;")
 	print("- Fixed Reset Sounds only working when the menu is toggled;")
 	print("- Fixed a Projectile Prediction bug where dying would cause script errors;")
 	print("- Fixed Disable Interpolation and Optimize Game not resetting when disabled;")
@@ -1576,17 +1587,18 @@ function ib.Changelog() -- Ran out of local variables, again
 	print("- Removed calls and variables that had no use;")
 	print("- Removed cloned hooks for better performance.")
 	print("\n")
-	print("IdiotBox v7.2.b2 ADDITIONS & CHANGES")
+	print("IdiotBox v7.3.b2 ADDITIONS & CHANGES")
 	print("")
 	print("Please note: This changelog includes feature changes from previous updates as well.")
 	print("\n")
 	print("- Added 'Projectile Prediction' and 'Line-of-Sight Check' to Aimbot;")
 	print("- Added 'Emote Resolver' to Resolver;")
-	print("- Added 'Distance Limit', 'Velocity Limit' and NPC targeting to Aim Assist;")
+	print("- Added 'Multi-Tap', 'Distance Limit', 'Velocity Limit', NPC targeting and engine prediction to Aim Assist;")
 	print("- Added 'Default', 'Static', 'Distance Adapt' and 'Crosshair Adapt' to Anti-Aim;")
+	print("- Added 'Lag Desync' to Fake Lag;")
 	print("- Added 'Position Lines', 'Flat' & 'Wireframe' chams materials, 'Adaptive Text Colors' and 'Target Priority Colors' to Visuals;")
 	print("- Added 'Remove 3D Skybox' to Textures;")
-	print("- Added 'Feature Tooltips', 'Spectator Mode' and more gamemode specific features to Main Menu;")
+	print("- Added 'Feature Tooltips', 'Spectator Mode', 'Ping Spoofer' and more gamemode specific features to Main Menu;")
 	print("- Added 'Target Spectators', 'Target Players', 'Target Immune Players' and 'Target Enemies' to Aim Priorities;")
 	print("- Added 'Toggle Key' and 'Speed' to Free Roaming;")
 	print("- Added 'Air Stuck', 'Circle Strafe Key' and 'Fake Crouch' to Movement;")
@@ -1594,15 +1606,18 @@ function ib.Changelog() -- Ran out of local variables, again
 	print("- Added 'Thirdperson Key', 'Custom Positions', 'Rainbow Mode' and 'Flat' & 'Wireframe' chams to Point of View;")
 	print("- Added 'Legit', 'Rage' and 'Directional' to Auto Strafe;")
 	print("- Added 'GUI Settings' to Miscellaneous;")
-	print("- Added engine prediction to Aim Assist;")
+	print("- Added 'Show Angles', 'Fake-Invert Pitch' and true fake angles to Anti-Aim;")
 	print("- Added better anti-cheat detection and protection;")
 	print("- Added customizable list adjustments to Priority List;")
 	print("- Added spread prediction and recoil compensation to Triggerbot;")
+	print("- Added simulation time counter to Debug Info;")
 	print("- Added more hitsounds, killsounds, more music and a custom music player to Sounds;")
 	print("- Added more customization options to Panels;")
+	print("- Added custom disconnect messages;")
 	print("- Added error logs to help with confusion;")
 	print("- Added background blur;")
 	print("- Added 64 bit compatibility, with a custom 'idiotbox.dll' module (created on ZXC architecture);")
+	print("- Reworked 'Disable Interpolation' from scratch;")
 	print("- Reworked 'Bunny Hop' and 'Auto Strafe' from scratch;")
 	print("- Reworked 'Wallhack' from scratch;")
 	print("- Reworked 'Radar', 'Spectators', 'Debug Info' and 'Players List' from Panels;")
@@ -1624,26 +1639,30 @@ function ib.Changelog() -- Ran out of local variables, again
 	print("- Removed 'dickwrap.dll', 'bsendpacket.dll', 'fhook.dll', 'big.dll' and 'chatclear.dll' modules;")
 	print("- Changed the Armor Bar and Armor Value colors from bright green to bright blue.")
 	print("\n")
-	print("IdiotBox TO-DO LIST")
-	print("")
-	print("Please note: This list includes any potential future additions/ changes/ removals, and is subject to change.")
-	print("\n")
-	print("- Add 'Backtracking' and 'Multi-Tap' to Aim Assist;")
-	print("- Add 'Fake Lag' & 'Fake Angles' chams to Visuals;")
-	print("- Add true fake angles to Anti-Aim;")
-	print("- Add color pickers instead of manual sliders;")
-	print("- Rework 'Auto Wallbang' from scratch;")
-	print("- Rework 'Projectile Prediction' from scratch;")
-	print("- Fix all unoptimized calls and functions.")
-	print("\n")
 	print("IdiotBox WORK-IN-PROGRESS LIST")
 	print("")
 	print("Please note: This list includes any potential future additions/ changes/ removals, and is subject to change.")
 	print("\n")
 	print("- Add adaptive menu resolution scaling;")
-	print("- Rework menu base from scratch;")
 	print("- Rework 'Entity Finder' and 'Plugin Loader' menus;")
+	print("- Rework 'Anti-Aim' from scratch;")
+	print("- Rework 'Projectile Prediction' from scratch;")
+	print("- Rework 'idiotbox.dll' module from scratch;")
+	print("- Rework 2D object rendering;")
+	print("- Rework menu base from scratch;")
+	print("- Fix angle snapback when faking angles;")
 	print("- Fix questionable UI choices.")
+	print("\n")
+	print("IdiotBox TO-DO LIST")
+	print("")
+	print("Please note: This list includes any potential future additions/ changes/ removals, and is subject to change.")
+	print("\n")
+	print("- Add 'Backtracking', 'Extrapolation' and 'Fake Lag Prediction' to Aim Assist;")
+	print("- Add adaptive circle strafing to Movement;")
+	print("- Add true shotgun spread prediction;")
+	print("- Add color pickers instead of manual sliders;")
+	print("- Rework 'Resolver' and 'Auto Wallbang' from scratch;")
+	print("- Fix all unoptimized calls and functions.")
 	print("\n\n===============================================================================================")
 	timer.Create("ChatPrint", 0.1, 1, function() Popup(2.5, "Successfully printed changelog to console!", Color(0, 255, 0)) end)
 	timer.Create("PlaySound", 0.1, 1, function() surface.PlaySound("buttons/lightswitch2.wav") end)
@@ -1959,6 +1978,8 @@ local function DrawButton(self, w, h, var, maxy, posx, posy, dist)
 			info = "Deletes your desired configuration file."
 		elseif feat == "Apply Custom Name" then
 			info = "Changes your in-game name to a custom one. Use the 'ib_changename' command, followed by your desired name."
+		elseif feat == "Custom Disconnect" then
+			info = "Disconnects you from the current server, with a custom reason. Use the 'ib_customdisconnect' command, followed by your desired reason."
 		elseif feat == "Print Changelog" then
 			info = "Prints the IdiotBox changelog in the console."
 		elseif feat == "Unload Cheat" then
@@ -2006,9 +2027,11 @@ local function DrawButton(self, w, h, var, maxy, posx, posy, dist)
 				end
 			end
 		elseif text == "Apply Custom Name" then
-			idiotbox.NetSetConVar("name", string.gsub(GetConVarString("ib_changename"), "\\n", "\n"))
+			ded.NetSetConVar("name", string.gsub(GetConVarString("ib_changename"), "\\n", "\n"))
 			timer.Create("ChatPrint", 0.1, 1, function() Popup(3.2, "Successfully applied custom username!", Color(0, 255, 0)) end)
 			timer.Create("PlaySound", 0.1, 1, function() surface.PlaySound("buttons/lightswitch2.wav") end)
+		elseif text == "Custom Disconnect" then
+			ded.NetDisconnect(GetConVarString("ib_customdisconnect"))
 		elseif text == "Reset All Game Sounds" then
 			RunConsoleCommand("stopsound")
 		end
@@ -2154,7 +2177,7 @@ local function Menu()
 			draw.RoundedBox(gInt("Adjustments", "Others", "Roundness:"), 1, 1, w - 2, h - 2, Color(bgmenucol.r + 55, bgmenucol.g + 55, bgmenucol.b + 55, 255))
 		end
 		draw.RoundedBox(gInt("Adjustments", "Others", "Roundness:"), 2, 2, w - 4, h - 4, Color(bgmenucol.r, bgmenucol.g, bgmenucol.b, 255))
-		DrawText(w, h, "IdiotBox v7.2.b2")
+		DrawText(w, h, "IdiotBox v7.3.b2")
 		DrawTabs(self, w, h)
 		DrawSub(self, w, h)
 		if (drawlast) then
@@ -2460,6 +2483,7 @@ local function Status()
 	local wep = pm.GetActiveWeapon(me)
 	local hp = em.Health(me)
 	local velocity = me:GetVelocity():Length()
+	local simtime = ded.GetSimulationTime(me)
 	if hp < 0 then
 		hp = 0
 	end
@@ -2501,10 +2525,13 @@ local function Status()
 		surface.DrawText("Entities: "..math.Round(ents.GetCount()))
 	hh = hh + 12
 		surface.SetTextPos(gInt("Adjustments", "List Adjustments", "Debug Info X:") + 3, hh + gInt("Adjustments", "List Adjustments", "Debug Info Y:"))
-		surface.DrawText("Frames: "..math.Round(1 / FrameTime()))
+		surface.DrawText("Simtime: "..string.format("%.3f", simtime).."s")
 	hh = hh + 12
 		surface.SetTextPos(gInt("Adjustments", "List Adjustments", "Debug Info X:") + 3, hh + gInt("Adjustments", "List Adjustments", "Debug Info Y:"))
-		surface.DrawText("Ping: "..me:Ping())
+		surface.DrawText("Performance: "..math.Round(1 / FrameTime()).." FPS")
+	hh = hh + 12
+		surface.SetTextPos(gInt("Adjustments", "List Adjustments", "Debug Info X:") + 3, hh + gInt("Adjustments", "List Adjustments", "Debug Info Y:"))
+		surface.DrawText("Ping: "..me:Ping().."ms")
 	hh = hh + 12
 		surface.SetTextPos(gInt("Adjustments", "List Adjustments", "Debug Info X:") + 3, hh + gInt("Adjustments", "List Adjustments", "Debug Info Y:"))
 		surface.DrawText("Date: "..os.date("%d %b %Y"))
@@ -2830,19 +2857,6 @@ local function Crosshair()
 end
 
 hook.Add("RenderScene", "RenderScene", function(origin, angle, fov)
-	--[[if gBool("Miscellaneous", "Textures", "Dark Mode") then
-		for k, v in pairs(game.GetWorld():GetMaterials()) do
-		Material(v):SetVector("$color", Vector(0.05, 0.05, 0.05))
-		end
-		render.SuppressEngineLighting(true)
-		render.ResetModelLighting(0.2, 0.2, 0.2)
-		else
-		for k, v in pairs(game.GetWorld():GetMaterials()) do
-		Material(v):SetVector("$color", Vector(1, 1, 1))
-		end
-		render.SuppressEngineLighting(false)
-		render.ResetModelLighting(1, 1, 1)
-	end]]--
 	render.SetLightingMode(gBool("Miscellaneous", "Textures", "Remove Shadows") and 1 or 0)
 	local view = {
 		dopostprocess = true,
@@ -2852,9 +2866,6 @@ hook.Add("RenderScene", "RenderScene", function(origin, angle, fov)
 	}
 	render.RenderView(view)
 	render.CopyTexture(nil, mat)
-	cam.Start2D()
-		hook.Run("MiscPaint")
-	cam.End2D()
 	render.SetRenderTarget(mat)
 	return true
 end)
@@ -2889,17 +2900,17 @@ local function ChatSpam()
 	local messagespam = {"GET FUCKED BY IDIOTBOX KIDDIE", "YOU SUCK SHIT LMAO", "STOP BEING SUCH A WORTHLESS CUMSTAIN AND GET IDIOTBOX NOW", "MONEY WASTER LOL", "YOU FUCKING FATASS, GET IDIOTBOX AND LOSE ALL THAT WEIGHT YOU INCEL", "ARE ALL THE GIRLS IGNORING YOU? GET IDIOTBOX AND YOU'LL BE FLOODED WITH PUSSY", "DO YOU FEEL WORTHLESS? WELL, YOU ARE LOL", "GET IDIOTBOX IF YOU WANT SOME OF THAT CLOUT", "STOP WASTING YOUR TIME ON SOUNDCLOUD BECAUSE YOU AIN'T GONNA GET NOWHERE WITH IT", "GET IDIOTBOX AND YOUR DICK WILL GROW 4 TIMES ITS SIZE", "LITTLE KID LMAO",}
 	local insultspam = {" is shit at building", " is no older than 13", " looks like a 2 month old corpse", " really thinks gmod is a good game", " can't afford a better pc lmao", ", so how do you like your 40 fps?", " will definitely kill himself before his 30's ", " is a fucking virgin lmao", " is a script kiddie", " thinks his 12cm penis is big lmfao", ", how does it feel when you've never seen a naked woman in person?", ", what do you like not being able to do a single push-up?", ", tell me how it feels to be shorter than every girl you've met", " is a fatass who only spends his time in front of a monitor like an incel", "'s parents have a lower than average income", " lives under a bridge lmao", " vapes because is too afraid to smoke an actual ciggarette", ", your low self esteem really pays off you loser", ", make sure you tell me what unemployment feels like", " lives off of his parents' money", ", you're a dissapointment to your entire family, fatass", " has probably fried all of his dopamine receptors by masturbating this much",}
 	local spamCategories = {
-		["Clear Chat"] = {function() idiotbox.NetSendMsgIdiotBox("say :"..string.rep("\n", 255).."") end},
-		["OOC Clear Chat"] = {function() idiotbox.NetSendMsgIdiotBox("say /ooc "..string.rep("\n", 255).."") end},
+		["Clear Chat"] = {"IM A RETARDED FAGGOT THAT LIKES CLEAR SPAM"},
+		["OOC Clear Chat"] = {"IM A RETARDED FAGGOT THAT LIKES CLEAR SPAM"},
 		["'H' Spam"] = {"HHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH"},
 		["N-Word Spam"] = {"nigger"},
 		["N-WORD SPAM"] = {"NIGGER"},
 		["Nazi 1"] = {"Die Fahne hoch! Die Reihen fest geschlossen", "SA marschiert mit ruhig festem Schritt", "Kam'raden, die Rotfront und Reaktion erschossen", "Marschier'n im Geist in unser'n Reihen mit", "Die Straße frei den braunen Bataillonen", "Die Straße frei dem Sturmabteilungsmann", "Es schau'n aufs Hakenkreuz voll Hoffnung schon Millionen", "Der Tag für Freiheit und für Brot bricht an", "Zum letzten Mal wird Sturmalarm geblasen", "Zum Kampfe steh'n wir alle schon bereit", "Schon flattern Hitlerfahnen über allen Straßen", "Die Knechtschaft dauert nur noch kurze Zeit", "Die Fahne hoch! Die Reihen fest geschlossen", "SA marschiert mit ruhig festem Schritt", "Kam'raden, die Rotfront und Reaktion erschossen", "Marschier'n im Geist in unser'n Reihen mit"},
 		["Nazi 2"] = {"SS marschiert in Feindesland", "Und singt ein Teufelslied", "Ein Schütze steht am Wolgastrand", "Und leise summt er mit", "Wir pfeifen auf Unten und Oben", "Und uns kann die ganze Welt", "Verfluchen oder auch loben", "Grad wie es jedem gefällt", "Wo wir sind da geht's immer vorwärts", "Und der Teufel, der lacht nur dazu", "Ha, ha, ha, ha, ha, ha", "Wir kämpfen für Deutschland", "Wir kämpfen für Hitler", "Der Rote kommt niemehr zur Ruh'", "Wir kämpften schon in mancher Schlacht", "In Nord, Süd, Ost und West", "Und stehen nun zum Kampf bereit", "Gegen die rote Pest", "SS wird nicht ruh'n, wir vernichten", "Bis niemand mehr stört Deutschlands Glück", "Und wenn sich die Reihen auch lichten", "Für uns gibt es nie ein Zurück", "Wo wir sind da geht's immer vorwärts", "Und der Teufel, der lacht nur dazu", "Ha, ha, ha, ha, ha, ha", "Wir kämpfen für Deutschland", "Wir kämpfen für Hitler", "Der Rote kommt niemehr zur Ruh'"},
 		["Nazi 3"] = {"Ade, mein liebes Schätzelein", "Ade, ade, ade", "Es muß, es muß geschieden sein", "Ade, ade, ade", "Es geht um Deutschlands Gloria", "Gloria, Gloria", "Sieg Heil! Sieg Heil Viktoria!", "Sieg Heil, Viktoria!", "Visier und Ziel sind eingestellt", "Ade, ade, ade", "Auf Stalin, Churchill, Roosevelt", "Ade, ade, ade", "Es geht um Deutschlands Gloria", "Gloria, Gloria", "Sieg Heil! Sieg Heil Viktoria!", "Sieg Heil, Viktoria!", "Wir ruhen und wir rasten nicht", "Ade, ade, ade", "Bis daß die Satansbrut zerbricht", "Ade, ade, ade", "Es geht um Deutschlands Gloria", "Gloria, Gloria", "Sieg Heil! Sieg Heil Viktoria!", "Sieg Heil, Viktoria!", "Reich mir die Hand zum Scheidegruß", "Ade, ade, ade", "Und deinen Mund zum Abschiedskuß", "Ade, ade, ade", "Es geht um Deutschlands Gloria", "Gloria, Gloria", "Sieg Heil! Sieg Heil Viktoria!", "Sieg Heil, Viktoria!"},
-		["Advertising 1"] = {"[IdiotBox] - https://phizzofficial.wixsite.com/idiotbox4gmod/", "[IdiotBox] - https://phizzofficial.wixsite.com/idiotbox4gmod/", "[IdiotBox] - https://phizzofficial.wixsite.com/idiotbox4gmod/", "[IdiotBox] - https://phizzofficial.wixsite.com/idiotbox4gmod/", "[IdiotBox] - https://phizzofficial.wixsite.com/idiotbox4gmod/", "[IdiotBox] - https://phizzofficial.wixsite.com/idiotbox4gmod/", "[IdiotBox] - Destroying everyone since '16.", "[IdiotBox] - Easy to use, free Garry's Mod cheat.", "[IdiotBox] - Now you can forget that negative KD's can be possible.", "[IdiotBox] - Beats all of your other cheats.", "[IdiotBox] - IdiotBox came back, and it came back with a vengeance.", "[IdiotBox] - Join the Discord server if you have a high IQ.", "[IdiotBox] - The only high-quality free cheat, out for Garry's Mod.", "[IdiotBox] - Best cheat, created by Phizz & more.", "[IdiotBox] - Always updated, never dead.", "[IdiotBox] - A highly reliable and optimised cheating software.", "[IdiotBox] - Top class, free cheat for Garry's Mod.", "[IdiotBox] - Makes noobs cry waves of tears since forever!", "[IdiotBox] - Say goodbye to the respawn room!", "[IdiotBox] - Download the highest quality Garry's Mod cheat for free now!", "[IdiotBox] - A reliable way to go!", "[IdiotBox] - Make Garry's Mod great again!", "[IdiotBox] - Visit our website for fresh Discord invite links!", "[IdiotBox] - Monthly bugfixes & updates. It never gets outdated!", "[IdiotBox] - Download IdiotBox v7.2.b2 right now!", "[IdiotBox] - Bug-free and fully customizable!", "[IdiotBox] - Join our Steam group and Discord server to stay up-to-date!", "[IdiotBox] - Refund all your cheats, use this better and free alternative!", "[IdiotBox] - Now with more features than ever!", "[IdiotBox] - The best Garry's Mod cheat, with 24/7 support, for free!", "[IdiotBox] - Bypasses most anti-cheats and screengrabbers!"},
+		["Advertising 1"] = {"[IdiotBox] - https://phizzofficial.wixsite.com/idiotbox4gmod/", "[IdiotBox] - https://phizzofficial.wixsite.com/idiotbox4gmod/", "[IdiotBox] - https://phizzofficial.wixsite.com/idiotbox4gmod/", "[IdiotBox] - https://phizzofficial.wixsite.com/idiotbox4gmod/", "[IdiotBox] - https://phizzofficial.wixsite.com/idiotbox4gmod/", "[IdiotBox] - https://phizzofficial.wixsite.com/idiotbox4gmod/", "[IdiotBox] - Destroying everyone since '16.", "[IdiotBox] - Easy to use, free Garry's Mod cheat.", "[IdiotBox] - Now you can forget that negative KD's can be possible.", "[IdiotBox] - Beats all of your other cheats.", "[IdiotBox] - IdiotBox came back, and it came back with a vengeance.", "[IdiotBox] - Join the Discord server if you have a high IQ.", "[IdiotBox] - The only high-quality free cheat, out for Garry's Mod.", "[IdiotBox] - Best cheat, created by Phizz & more.", "[IdiotBox] - Always updated, never dead.", "[IdiotBox] - A highly reliable and optimised cheating software.", "[IdiotBox] - Top class, free cheat for Garry's Mod.", "[IdiotBox] - Makes noobs cry waves of tears since forever!", "[IdiotBox] - Say goodbye to the respawn room!", "[IdiotBox] - Download the highest quality Garry's Mod cheat for free now!", "[IdiotBox] - A reliable way to go!", "[IdiotBox] - Make Garry's Mod great again!", "[IdiotBox] - Visit our website for fresh Discord invite links!", "[IdiotBox] - Monthly bugfixes & updates. It never gets outdated!", "[IdiotBox] - Download IdiotBox v7.3.b2 right now!", "[IdiotBox] - Bug-free and fully customizable!", "[IdiotBox] - Join our Steam group and Discord server to stay up-to-date!", "[IdiotBox] - Refund all your cheats, use this better and free alternative!", "[IdiotBox] - Now with more features than ever!", "[IdiotBox] - The best Garry's Mod cheat, with 24/7 support, for free!", "[IdiotBox] - Bypasses most anti-cheats and screengrabbers!"},
 		["Advertising 2"] = {"[www.IB4G.net] - https://phizzofficial.wixsite.com/idiotbox4gmod/", "[www.IB4G.net] - https://phizzofficial.wixsite.com/idiotbox4gmod/", "[www.IB4G.net] - https://phizzofficial.wixsite.com/idiotbox4gmod/", "[www.IB4G.net] - https://phizzofficial.wixsite.com/idiotbox4gmod/", "[www.IB4G.net] - https://phizzofficial.wixsite.com/idiotbox4gmod/", "[www.IB4G.net] - https://phizzofficial.wixsite.com/idiotbox4gmod/", "[www.IB4G.net] - WORST FRAMERATE, BEST FEATURES!", "[www.IB4G.net] - WHAT ARE YOU WAITING FOR?", "[www.IB4G.net] - BEST GARRY'S MOD CHEAT OUT RIGHT NOW!", "[www.IB4G.net] - SAY GOODBYE TO THE RESPAWN ROOM!", "[www.IB4G.net] - NO SKILL REQUIRED!", "[www.IB4G.net] - NEVER DIE AGAIN WITH THIS!", "[www.IB4G.net] - ONLY HIGH IQ NIGGAS' USE IDIOTBOX!", "[www.IB4G.net] - THE GAME IS NOT ACTUALLY DYING, I JUST LIKE TO ANNOY KIDS LOL!", "[www.IB4G.net] - DOWNLOAD THE CHEAT FOR FREE!", "[www.IB4G.net] - NOW WITH AUTOMATIC UPDATES!", "[www.IB4G.net] - GUARANTEED SWAG AND RESPECT ON EVERY SERVER!", "[www.IB4G.net] - IDIOTBOX COMING SOON TO TETIRS!", "[www.IB4G.net] - VISIT OUR WEBSITE FOR A FRESH INVITE LINK TO OUR DISCORD!", "[www.IB4G.net] - PHIZZ IS A GOD FOR MAKING THIS!", "[www.IB4G.net] - BECOME THE SERVER MVP IN NO TIME!", "[www.IB4G.net] - 100% NO SKILL REQUIRED!", "[www.IB4G.net] - BEST CHEAT, MADE BY THE CHINESE COMMUNIST PARTY!", "[www.IB4G.net] - MAKE IDIOTBOX GREAT AGAIN!", "[www.IB4G.net] - WHY ARE YOU NOT CHEATING IN A DYING GAME?", "[www.IB4G.net] - RUINING EVERYONE'S FUN SINCE 2016!", "[www.IB4G.net] - IT'S PASTED, BUT IT'S THE BEST PASTE YOU WILL EVER USE!", "[www.IB4G.net] - A VERY CLEAN, HIGH-QUALITY AND BUG-FREE PASTE!", "[www.IB4G.net] - ALWAYS UPDATED! NEVER GETS OUTDATED!", "[www.IB4G.net] - WITH A FUCK TON OF NEW FEATURES!", "[www.IB4G.net] - ONCE YOU GO BLACK, YOU NEVER GO BACK. GET IDIOTBOX NOW!", "[www.IB4G.net] - SACRIFICE A FEW FRAMES FOR THE BEST EXPERIENCE OF YOUR LIFE!", "[www.IB4G.net] - STEAM GROUP WAS TAKEN DOWN, BUT IT'S BACK BABY!", "[www.IB4G.net] - BEST GARRY'S MOD CHEAT, NO CAP!", "[www.IB4G.net] - WITH IDIOTBOX, YOU'LL NEVER GET BANNED FOR CHEATING AGAIN!", "[www.IB4G.net] - DISCORD SERVER WAS TAKEN DOWN MANY TIMES, BUT WE ALWAYS COME BACK!"},
-		["Advertising 3"] = {"Get IdiotBox you fucking smelly niggers", "IdiotBox is the best fucking cheat and that is a fact", "All of you are fucking autistic for not having IdiotBox", "Why the fuck don't you get IdiotBox lol", "Stay being gay or get IdiotBox", "Your moms should know that you play grown-up games, join our Discord to prove you are not under-aged", "I have your IPs you dumb niggers, I will delete the IPs if you get IdiotBox", "You all fucking smell like shit for not using IdiotBox", "IdiotBox makes kiddos cry and piss their pants maybe and maybe shit and cum", "IdiotBox is the best free cheat in the history of the entire world so get it faggots", "Download IdiotBox at https://phizzofficial.wixsite.com/idiotbox4gmod/ or you're retarded", "Join our fucking Discord or else you are literally an unpriviledged niggers", "IdiotBox is a cheat for people with high IQ only, use IdiotBox to prove you're smart", "Don't wanna get fucking raped? Get IdiotBox and shit on them skids", "This is the best free paste around, no other paste is better than IdiotBox", "How the fuck are you not using IdiotBox in a shitty dying game lmfao", "IdiotBox is the best and most popular Garry's Mod cheat ever, why are you not using it lol", "May cause a bit of lag but it's worth it for the fuckton of features that it has", "You're all faggots if you don't cheat with IdiotBox", "You literally go to pride month parades if you don't use IdiotBox", "Idiotbox is the highest quality, most popular free cheat, just get it already", "Shit on all of the virgins that unironically play this game with this high-quality cheat", "Get good, get IdiotBox you fucking retards", "You're mad retarded if you are not using IdiotBox, no cap", "Own every single retard in HvH with this superior cheat now", "All of you are dumb niggers for not downloading IdiotBox and that is a fact", "You suck fat cocks in public bathrooms if you're not using IdiotBox", "Just get this god-like cheat already and rape all existing servers", "No you idiots, you can't get VAC banned for using lua scripts you absolute cretins", "IdiotBox bypasses even the most complex anti-cheats and screengrabbers, you're not getting banned anytime soon", "Just use IdiotBox to revert your sad lives and feel better about yourselves", "Phizz is a god because he made this god-like cheat called IdiotBox", "I am forced to put IdiotBox in almost every sentence and advertise in a toxic way because I'm a text in a lua script", "Why are you fucking gay? Get IdiotBox today", "The sentence above is a rhyme but the script says to put random sentences so I don't think you can see it, get IdiotBox btw", "Purchase IdiotBox now! Only for OH wait it's free", "It is highly recommended that you get IdiotBox in case of getting pwned", "You are swag and good looking, but only if you get IdiotBox", "Phizz spent so many fucking nights creating this masterpiece of a cheat so get it now or he will legit kill you", "Fuck you and get IdiotBox now lol", "IdiotBox is constantly getting updated with dope-ass features, it never gets outdated so just get it", "Have IdiotBox installed if you're mega straight and zero gay", "Whoever the fuck said lua cheats are bad deserves to die in a house fire", "You get IdiotBox, everyone else on the server gets pwned, ez as that", "Many cheats copied IdiotBox, but this is the original one, fucking copycats", "Join the fucking Discord, promise it won't hurt you faggots", "Download IdiotBox at https://phizzofficial.wixsite.com/idiotbox4gmod/ right this moment or I will hire a hitman to kill you", "Join the IdiotBox group at OH wait niggers got mad and mass-reported it, kys shitkids", "Nvm, Steam group is back lol get fucked you mad skid shitkids", "IdiotBox killed all of the paid cheats because it's too good", "Get IdiotBox, it's free and very good, you sacks of crying shit", "IdiotBox is the fucking G.O.A.T.", "What the fuck are you doing not using this god-like cheat lol", "This is an epic fucking cheat called IdiotBox that was created by Phizz and others, worship your new gods kiddos", "You were fed cock milk as a baby if you're not using IdiotBox and you can not prove me wrong", "IdiotBox has the dopest anti-aims and resolvers you'll ever use, you will be a HvH god", "Just please get IdiotBox already you retards, I am tired of typing these lines for fuck's sake", "Phizz will give everyone optimized IdiotBox soon so quit your shit", "IdiotBox needs no Steam group, we're too chad for one", "Our Discord was tapped at some point but IdiotBox is back and stronger than ever", "IdiotBox came back to kill silly niggers, and it came back with a vengeance", "Download Idiotbox v7.2.b2 now, you dont even know what you're missing you mongoloids", "Have I told you about IdiotBox, the best Garry's Mod cheat ever made??", "Holy shit, IdiotBox for Garry's Mod is the best cheat that I have ever used!!"},
+		["Advertising 3"] = {"Get IdiotBox you fucking smelly niggers", "IdiotBox is the best fucking cheat and that is a fact", "All of you are fucking autistic for not having IdiotBox", "Why the fuck don't you get IdiotBox lol", "Stay being gay or get IdiotBox", "Your moms should know that you play grown-up games, join our Discord to prove you are not under-aged", "I have your IPs you dumb niggers, I will delete the IPs if you get IdiotBox", "You all fucking smell like shit for not using IdiotBox", "IdiotBox makes kiddos cry and piss their pants maybe and maybe shit and cum", "IdiotBox is the best free cheat in the history of the entire world so get it faggots", "Download IdiotBox at https://phizzofficial.wixsite.com/idiotbox4gmod/ or you're retarded", "Join our fucking Discord or else you are literally an unpriviledged niggers", "IdiotBox is a cheat for people with high IQ only, use IdiotBox to prove you're smart", "Don't wanna get fucking raped? Get IdiotBox and shit on them skids", "This is the best free paste around, no other paste is better than IdiotBox", "How the fuck are you not using IdiotBox in a shitty dying game lmfao", "IdiotBox is the best and most popular Garry's Mod cheat ever, why are you not using it lol", "May cause a bit of lag but it's worth it for the fuckton of features that it has", "You're all faggots if you don't cheat with IdiotBox", "You literally go to pride month parades if you don't use IdiotBox", "Idiotbox is the highest quality, most popular free cheat, just get it already", "Shit on all of the virgins that unironically play this game with this high-quality cheat", "Get good, get IdiotBox you fucking retards", "You're mad retarded if you are not using IdiotBox, no cap", "Own every single retard in HvH with this superior cheat now", "All of you are dumb niggers for not downloading IdiotBox and that is a fact", "You suck fat cocks in public bathrooms if you're not using IdiotBox", "Just get this god-like cheat already and rape all existing servers", "No you idiots, you can't get VAC banned for using lua scripts you absolute cretins", "IdiotBox bypasses even the most complex anti-cheats and screengrabbers, you're not getting banned anytime soon", "Just use IdiotBox to revert your sad lives and feel better about yourselves", "Phizz is a god because he made this god-like cheat called IdiotBox", "I am forced to put IdiotBox in almost every sentence and advertise in a toxic way because I'm a text in a lua script", "Why are you fucking gay? Get IdiotBox today", "The sentence above is a rhyme but the script says to put random sentences so I don't think you can see it, get IdiotBox btw", "Purchase IdiotBox now! Only for OH wait it's free", "It is highly recommended that you get IdiotBox in case of getting pwned", "You are swag and good looking, but only if you get IdiotBox", "Phizz spent so many fucking nights creating this masterpiece of a cheat so get it now or he will legit kill you", "Fuck you and get IdiotBox now lol", "IdiotBox is constantly getting updated with dope-ass features, it never gets outdated so just get it", "Have IdiotBox installed if you're mega straight and zero gay", "Whoever the fuck said lua cheats are bad deserves to die in a house fire", "You get IdiotBox, everyone else on the server gets pwned, ez as that", "Many cheats copied IdiotBox, but this is the original one, fucking copycats", "Join the fucking Discord, promise it won't hurt you faggots", "Download IdiotBox at https://phizzofficial.wixsite.com/idiotbox4gmod/ right this moment or I will hire a hitman to kill you", "Join the IdiotBox group at OH wait niggers got mad and mass-reported it, kys shitkids", "Nvm, Steam group is back lol get fucked you mad skid shitkids", "IdiotBox killed all of the paid cheats because it's too good", "Get IdiotBox, it's free and very good, you sacks of crying shit", "IdiotBox is the fucking G.O.A.T.", "What the fuck are you doing not using this god-like cheat lol", "This is an epic fucking cheat called IdiotBox that was created by Phizz and others, worship your new gods kiddos", "You were fed cock milk as a baby if you're not using IdiotBox and you can not prove me wrong", "IdiotBox has the dopest anti-aims and resolvers you'll ever use, you will be a HvH god", "Just please get IdiotBox already you retards, I am tired of typing these lines for fuck's sake", "Phizz will give everyone optimized IdiotBox soon so quit your shit", "IdiotBox needs no Steam group, we're too chad for one", "Our Discord was tapped at some point but IdiotBox is back and stronger than ever", "IdiotBox came back to kill silly niggers, and it came back with a vengeance", "Download Idiotbox v7.3.b2 now, you dont even know what you're missing you mongoloids", "Have I told you about IdiotBox, the best Garry's Mod cheat ever made??", "Holy shit, IdiotBox for Garry's Mod is the best cheat that I have ever used!!"},
 		["Hebrew Spam"] = {"לזיין את הכלב שלך אמא לעזאזל חרא סקס בכוס", "לעזאזל כוס כלבה בזין אני אוהבת עורלה הדוקה חתכה לי שלום כומר", "זו לא בדיחה מזוינת אני רוצה לתלות את עצמי השנה", "תזדיין שאתה יהודי הוא הגדול ביותר שכולכם כושים", "אני אהיה בן שש בשנה מכושן", "יש למול את הפין", "ישראל היא פלסטין המזוין הגדול ביותר במדינה", "זקן ישבן גדול על סנטרי, זהב בביתי, פוליטיקה במכנסיים שלי", "מזדיין לצאת מכושים ישראלים", "כוס חתולה אני מזיין את הזין ואז אני מוצץ כן", "חרא של אלוהים זה חרא של רחוב כן", "אני הולך לזיין ילד בן שתים עשרה בתחת, כן חתוך עורלה לעזאזל חרא כלבה"},
 		["Arabic Spam"] = {"يمارس الجنس مع السلطة العربية سنة عظيمة", "رائحة مثل البظر دون السن القانونية هنا اسمحوا لي أن اللعنة", "ازدهار مسحوق الطاقة العربية سنة جيدة", "نحن نكره اليهو", "يمارس الجنس مع الأطفال الماعز نعم الجنس", "الله أكبر نعم رجل تفجير طفل", "هذه لحظة بره لحظة ارهابية سنة", "في تلك اللحظة التي يبدأ فيها أخاك في المغازلة مع والدتك", "الحصول على صندوق احمق نعم العربية غش كازاخستان", "يمارس الجنس مع نيغا الكلبة دا قرن الطفل", "ترك العرب باكستاني لحظة برمة تجميع كرمة", "حرق اليهود ، يمارس الجنس مع المسيح ، قتل الأطفال ، أصبح الله"},
 		["Offensive Spam"] = {"fuck niggers like fr", "who else here hates black people lmao", "all niggers should be locked in cages and fed bananas", "black people are some sub-human slaves imo", "i've never met an intelligent black person", "why tf are all niggers so ugly lol", "all the black dudes i've seen look like monkeys", "ooga booga black rights", "my grandpa died in ww2, he was the best german pilot", "white people are genetically superior to every othe race", "all jews can do is hide the truth, steal money and start wars"},
@@ -3399,10 +3410,13 @@ local function TraitorDetector()
 			if (_v:GetRole() ~= 2) then
 				_v.Detected = true
 				Popup(4.3, _v:Nick().." is a Traitor. They just bought: "..v:GetPrintName(), Color(255, 255, 0))
+				chat.AddText(Color(255, 255, 255), "\n[TRAITOR FINDER LOGS]")
+				chat.AddText(Color(255, 255, 255), "Detected traitor: ", Color(255, 0, 0), _v:Nick())
+				chat.AddText(Color(255, 255, 255), "Item purchased: ", Color(255, 0, 0), v:GetPrintName().."\n")
 				surface.PlaySound("npc/scanner/combat_scan1.wav")
 			end
 		elseif (global.GetRoundState() ~= 3) then
-				v.Detected = false
+				_v.Detected = false
 			end
 		end
 	end
@@ -3488,7 +3502,7 @@ function ib.NameStealer()
 		local randply = player.GetAll()[math.random(#player.GetAll())]
 		local friendstatus = pm.GetFriendStatus(randply)
 		if (!randply:IsValid() || randply == me || friendstatus == "friend" || (gBool("Main Menu", "Priority List", "Enabled") && table.HasValue(ignorelist, randply:UniqueID())) || (gBool("Main Menu", "Priority List", "Enabled") && gOption("Miscellaneous", "Miscellaneous", "Name Stealer:") == "Priority Targets" && !table.HasValue(prioritylist, randply:UniqueID()))) then return end
-			idiotbox.NetSetConVar("name", randply:Name().." ")
+			ded.NetSetConVar("name", randply:Name().." ")
 		elseif gOption("Miscellaneous", "Miscellaneous", "Name Stealer:") == "DarkRP Name" then
 			namechangetime = namechangetime + 1
 		if namechangetime > 500 then
@@ -3516,23 +3530,12 @@ local function Tick()
 	if gBool("Main Menu", "Miscellaneous", "Optimize Game") then
 		if not optimized then
 			me:ConCommand("r_cleardecals; M9KGasEffect 0")
-		optimized = true
+			optimized = true
 		end
 	else
 		if optimized then
 			me:ConCommand("M9KGasEffect 1")
-		optimized = false
-		end
-	end
-	if gBool("Aim Assist", "Miscellaneous", "Disable Interpolation") then
-		if not applied then
-			me:ConCommand("cl_interp 0; cl_interp_ratio 0; cl_updaterate 99999")
-		applied = true
-		end
-	else
-		if applied then
-			me:ConCommand("cl_interp 0; cl_interp_ratio 2; cl_updaterate 30")
-		applied = false
+			optimized = false
 		end
 	end
 	local skycvar = GetConVar("r_3dsky")
@@ -3694,30 +3697,6 @@ end)
 hook.Add("Think", "Think", function()
 	TraitorDetector()
 	MurdererDetector()
-	if engine.ActiveGamemode() == "terrortown" then
-		if gBool("Main Menu", "Trouble in Terrorist Town Utilities", "Traitor Finder") then
-			if GetRoundState() == ROUND_ACTIVE then
-				for k, v in next, ents.GetAll() do
-					if not v:IsValid() or v:IsWeapon() then continue end
-					if (v:GetOwner():IsPlayer() and v:GetOwner():IsDetective()) or v:GetOwner() == me then continue end
-					if not me:IsTraitor() and v:GetOwner():IsPlayer() and table.HasValue(v.CanBuy, 1) and not table.HasValue(tweps, v:GetClass()) and not table.HasValue(traitors, v:GetOwner():UniqueID()) then
-						table.insert(traitors, v:GetOwner():UniqueID())
-						table.insert(tweps, v:GetClass())
-							chat.AddText(Color(255, 255, 255), "\n[TRAITOR FINDER LOGS]")
-							chat.AddText(Color(255, 255, 255), "Detected traitor: ", Color(255, 0, 0), v:GetOwner():Nick())
-							chat.AddText(Color(255, 255, 255), "Item purchased: ", Color(255, 0, 0), v:GetPrintName().."\n")
-							surface.PlaySound("buttons/lightswitch2.wav")
-					elseif gBool("Main Menu", "Trouble in Terrorist Town Utilities", "Traitor Finder") and me:IsTraitor() and v:GetOwner():IsPlayer() and v:GetOwner():IsTraitor() then
-						table.insert(traitors, v:GetOwner():UniqueID())
-						table.insert(tweps, v:GetClass())
-					end
-				end
-			elseif GetRoundState() == ROUND_POST and #traitors > 0 then
-				table.Empty(traitors)
-				table.Empty(tweps)
-			end
-		end
-	end
 end)
 
 hook.Add("CalcViewModelView", "CalcViewModelView", function(wep, vm, oldPos, oldAng, pos, ang)
@@ -3798,13 +3777,38 @@ local function AutoReload(cmd)
 	end
 end
 
-local function OnScreen(v)
-	if math.abs(v:LocalToWorld(v:OBBCenter()):ToScreen().x) < ScrW() * 5 and math.abs(v:LocalToWorld(v:OBBCenter()):ToScreen().y) < ScrH() * 5 then
-		return true
-	else
-		return false
-	end
+function OnScreen(v)
+    local dir = v:GetPos() - EyePos()
+    local len = dir:Length()
+
+    local w = 0
+
+
+
+    if w == 0 then
+        local mins, maxs = v:OBBMins(), v:OBBMaxs()
+
+        local left = v:LocalToWorld(Vector(mins.x, 0, 0)):ToScreen()
+        local right = v:LocalToWorld(Vector(maxs.x, 0, 0)):ToScreen()
+
+        if left and right then
+            w = math.abs(right.x - left.x)
+        end
+    end
+
+    if w == 0 then
+        w = 50
+    end
+
+    local max_angle = math.acos(len / math.sqrt((len * len) + (w/2 * w/2)))
+
+    local extraFov = gInt("Visuals", "Point of View", "FoV Value:")
+    local adjusted_max_angle = max_angle + math.rad(extraFov)
+
+    dir:Normalize()
+    return dir:Dot(EyeVector()) > math.cos(adjusted_max_angle)
 end
+
 
 local function Visuals(v)
 	local colOne = (ib.contributors[v:SteamID()] || ib.creator[v:SteamID()]) && Color(0, 0, 0) || (gBool("Visuals", "Miscellaneous", "Target Priority Colors") and ((table.HasValue(ignorelist, v:UniqueID()) && Color(ignoredtargetscol.r, ignoredtargetscol.g, ignoredtargetscol.b)) or (table.HasValue(prioritylist, v:UniqueID()) && Color(prioritytargetscol.r, prioritytargetscol.g, prioritytargetscol.b)))) || gBool("Visuals", "Miscellaneous", "Team Colors") && team.GetColor(pm.Team(v)) || GetColor(v)
@@ -3832,14 +3836,16 @@ local function Visuals(v)
 		end
 		if not OnScreen(v) then return false end -- I just thought it would make more sense for the function above to work, even if the player is off the screen
 		if gOption("Visuals", "Wallhack", "Position Lines:") ~= "Off" then
-			local pos = v:LocalToWorld(v:OBBCenter()):ToScreen()
+			local pos = v:LocalToWorld(v:OBBCenter())
+                        local screen = pos:ToScreen()
+			local x, y = screen.x, screen.y
 				surface.SetDrawColor(colThree)
 				if gOption("Visuals", "Wallhack", "Position Lines:") == "Bottom" then
-					surface.DrawLine(ScrW() / 2, ScrH(), pos.x, pos.y)
+					surface.DrawLine(ScrW() / 2, ScrH(), x, y)
 				elseif gOption("Visuals", "Wallhack", "Position Lines:") == "Top" then
-					surface.DrawLine(ScrW() / 2, 0, pos.x, pos.y)
+					surface.DrawLine(ScrW() / 2, 0, x, y)
 				else
-					surface.DrawLine(ScrW() / 2, ScrH() / 2, pos.x, pos.y)
+					surface.DrawLine(ScrW() / 2, ScrH() / 2, x, y)
 				end
 			end
 			if gOption("Visuals", "Wallhack", "Style:") == "Optimized" then
@@ -4593,34 +4599,33 @@ local function Visuals(v)
 end
 
 hook.Add("RenderScreenspaceEffects", "RenderScreenspaceEffects", function()
-	if gBool("Visuals", "Wallhack", "Enabled") then 
-	for k, v in next, player.GetAll() do
-		if (not em.IsValid(v) or em.Health(v) < 1 or (em.IsDormant(v) and (gOption("Visuals", "Miscellaneous", "Dormant Check:") == "Players" or gOption("Visuals", "Miscellaneous", "Dormant Check:") == "Entities" or gOption("Visuals", "Miscellaneous", "Dormant Check:") == "All")) or (!(ThirdpersonCheck() and gOption("Visuals", "Wallhack", "Visibility:") == "Clientside") and v == me) or (gOption("Visuals", "Wallhack", "Visibility:") == "Global" and v == me) or (pm.Team(v) == TEAM_SPECTATOR and not gBool("Visuals", "Miscellaneous", "Show Spectators"))) or not OnScreen(v) or not WallhackFilter(v) or not EnemyWallhackFilter(v) then continue end
-		PlayerChams(v)
-	end
-	for k, v in next, ents.GetAll() do
-		if not v:IsValid() or (not gBool("Visuals", "Miscellaneous", "Show Entities") or (em.IsDormant(v) and (gOption("Visuals", "Miscellaneous", "Dormant Check:") == "Entities" or gOption("Visuals", "Miscellaneous", "Dormant Check:") == "All"))) or not OnScreen(v) or not WallhackFilter(v) then continue end
-		if table.HasValue(drawnents, v:GetClass()) and v:IsValid() and v:GetPos():Distance(me:GetPos()) > 40 then
-			EntityChams(v)
+	if gBool("Visuals", "Wallhack", "Enabled") then
+		for k, v in next, player.GetAll() do
+			if (not em.IsValid(v) or em.Health(v) < 1 or (em.IsDormant(v) and (gOption("Visuals", "Miscellaneous", "Dormant Check:") == "Players" or gOption("Visuals", "Miscellaneous", "Dormant Check:") == "Entities" or gOption("Visuals", "Miscellaneous", "Dormant Check:") == "All")) or (!(ThirdpersonCheck() and gOption("Visuals", "Wallhack", "Visibility:") == "Clientside") and v == me) or (gOption("Visuals", "Wallhack", "Visibility:") == "Global" and v == me) or (pm.Team(v) == TEAM_SPECTATOR and not gBool("Visuals", "Miscellaneous", "Show Spectators"))) or not OnScreen(v) or not WallhackFilter(v) or not EnemyWallhackFilter(v) then continue end
+			PlayerChams(v)
+		end
+		for k, v in next, ents.GetAll() do
+			if not v:IsValid() or (not gBool("Visuals", "Miscellaneous", "Show Entities") or (em.IsDormant(v) and (gOption("Visuals", "Miscellaneous", "Dormant Check:") == "Entities" or gOption("Visuals", "Miscellaneous", "Dormant Check:") == "All"))) or not OnScreen(v) or not WallhackFilter(v) then continue end
+			if table.HasValue(drawnents, v:GetClass()) and v:IsValid() and v:GetPos():Distance(me:GetPos()) > 40 then
+				EntityChams(v)
+			end
+		end
+		for k, v in pairs(ents.FindByClass("npc_*")) do
+			if (not gBool("Visuals", "Miscellaneous", "Show NPCs") or not em.IsValid(v) or em.Health(v) < 1 or (em.IsDormant(v) and (gOption("Visuals", "Miscellaneous", "Dormant Check:") == "Entities" or gOption("Visuals", "Miscellaneous", "Dormant Check:") == "All"))) or not OnScreen(v) or not WallhackFilter(v) then continue end
+			NPCChams(v)
 		end
 	end
-	for k, v in pairs(ents.FindByClass("npc_*")) do
-		if (not gBool("Visuals", "Miscellaneous", "Show NPCs") or not em.IsValid(v) or em.Health(v) < 1 or (em.IsDormant(v) and (gOption("Visuals", "Miscellaneous", "Dormant Check:") == "Entities" or gOption("Visuals", "Miscellaneous", "Dormant Check:") == "All"))) or not OnScreen(v) or not WallhackFilter(v) then continue end
-		NPCChams(v)
-	end
-        end
-        cam.Start3D()
-        if gBool("Hack vs. Hack", "Miscellaneous", "Show Angles") then
-            render.MaterialOverride(ib.chamsmat6)
-            render.SetColorModulation(0, 1, 0) 
-            aaply1:DrawModel()
-        end
-        if gBool("Hack vs. Hack", "Fake Lag", "Enabled") and gBool("Hack vs. Hack", "Miscellaneous", "Show Angles") then
-            render.MaterialOverride(ib.chamsmat6)
-            render.SetColorModulation(1, 0, 0) 
-            aaply2:DrawModel()
-        end
-        cam.End3D()
+	cam.Start3D()
+    if gBool("Hack vs. Hack", "Anti-Aim", "Enabled") and gBool("Hack vs. Hack", "Fake Lag", "Enabled") and gBool("Hack vs. Hack", "Anti-Aim", "Show Angles") then
+		if (me:Team() == TEAM_SPECTATOR and not gBool("Main Menu", "Miscellaneous", "Spectator Mode")) or not me:Alive() or me:Health() < 1 or not ThirdpersonCheck() then return end
+        render.MaterialOverride(ib.chamsmat6)
+        render.SetColorModulation(1, 0, 0) 
+        aaply2:DrawModel()
+		render.MaterialOverride(ib.chamsmat6)
+        render.SetColorModulation(0, 1, 0) 
+        aaply1:DrawModel()
+    end
+    cam.End3D()
 end)
 
 local function ShowNPCs()
@@ -4657,14 +4662,16 @@ local function ShowNPCs()
 		surface.SetDrawColor(Color(0, 0, 0))
 	end
 	if gOption("Visuals", "Wallhack", "Position Lines:") ~= "Off" then
-		local pos = v:LocalToWorld(v:OBBCenter()):ToScreen()
+		local pos = v:LocalToWorld(v:OBBCenter())
+                local screen = pos:ToScreen()
+		local x, y = screen.x, screen.y
 			surface.SetDrawColor(colOne)
 		if gOption("Visuals", "Wallhack", "Position Lines:") == "Bottom" then
-			surface.DrawLine(ScrW() / 2, ScrH(), pos.x, pos.y)
+			surface.DrawLine(ScrW() / 2, ScrH(), x, y)
 		elseif gOption("Visuals", "Wallhack", "Position Lines:") == "Top" then
-			surface.DrawLine(ScrW() / 2, 0, pos.x, pos.y)
+			surface.DrawLine(ScrW() / 2, 0, x, y)
 		else
-			surface.DrawLine(ScrW() / 2, ScrH() / 2, pos.x, pos.y)
+			surface.DrawLine(ScrW() / 2, ScrH() / 2, x, y)
 		end
 	end
 	if gBool("Visuals", "Wallhack", "Skeleton") then
@@ -4951,6 +4958,20 @@ local function Valid(v)
 	return false
 end
 
+local function GetLerpTime()
+	if GetConVar("cl_interpolate"):GetInt() == 0 then return 0 end
+
+	local lerpRatio = GetConVar("cl_interp_ratio"):GetFloat()
+	if lerpRatio == 0 then
+		lerpRatio = 1
+	end
+
+	local lerpAmount = GetConVar("cl_interp"):GetFloat()
+	local updateRate = GetConVar("cl_updaterate"):GetFloat()
+
+	return math.max(lerpAmount, lerpRatio / updateRate)
+end
+
 local function GetTarget()
 	local opt = gOption("Aim Assist", "Aim Priorities", "Aim Priority:")
 	local sticky = gBool("Aim Assist", "Aimbot", "Target Lock")
@@ -4995,8 +5016,8 @@ local function GetTarget()
 		local x, y = ScrW(), ScrH()
 		for k, v in next, ents.GetAll() do
 			if (!Valid(v)) then continue end
-      			local eyepos = v:EyePos():ToScreen()
-			dists[#dists + 1] = {math.Dist(x / 2, y / 2, eyepos.x, eyepos.y), v}              
+			local eyepos = v:EyePos():ToScreen()
+			dists[#dists + 1] = {math.Dist(x / 2, y / 2, eyepos.x, eyepos.y), v}
 		end
 		table.sort(dists, function(a, b)
 			return(a[1] < b[1])
@@ -5514,6 +5535,22 @@ local function PredictSpread(cmd, ang) -- HUGE FUCKING THANKS TO S0LUM'S NCMD (a
 	end
 end
 
+function ib.MultiTap(cmd)
+	if gBool("Aim Assist", "Miscellaneous", "Multi-Tap") and !FixTools() then
+		local wep = me:GetActiveWeapon()
+		if !IsValid(wep) then return end
+		local class = wep:GetClass()
+		local attack = cmd:KeyDown(IN_ATTACK) or cmd:KeyDown(IN_ATTACK2)
+		if attack and not ib.attackLastTick and not wep:IsScripted() then
+			ded.SetOutSequenceNr(ded.GetOutSequenceNr() + ib.tickRate - 1)
+			ib.debounceMultifire = true 
+		elseif debounceMultifire then 
+			ib.debounceMultifire = false 
+		end
+		ib.attackLastTick = attack
+	end
+end
+
 local function AutoFire(cmd)
 	if cm.KeyDown(cmd, 1) then
 		cm.RemoveKey(cmd, IN_ATTACK)
@@ -5672,31 +5709,46 @@ function ib.CalculateAntiRecoil()
 	end
 end
 
+
 local function Aimbot(cmd)
 	if not gBool("Aim Assist", "Aimbot", "Enabled") or not me:Alive() or me:Health() < 1 or not me:GetActiveWeapon():IsValid() or (me:Team() == TEAM_SPECTATOR and not (gBool("Aim Assist", "Aim Priorities", "Target Spectators") and gBool("Main Menu", "Miscellaneous", "Spectator Mode"))) then return end
 	for k, v in pairs(player.GetAll()) do
 		if !v:IsValid() || ((gBool("Main Menu", "Panic Mode", "Enabled") && (gOption("Main Menu", "Panic Mode", "Mode:") == "Disable All" || gOption("Main Menu", "Panic Mode", "Mode:") == "Disable Aimbot")) && IsValid(v:GetObserverTarget()) && v:GetObserverTarget() == me) || FixTools() then return end
-        if gBool("Hack vs. Hack", "Miscellaneous", "Fakelag Fix") then
-                    local predTime =  (idiotbox.GetLatency(0) + idiotbox.GetLatency(1)) * 0.7 
-                    local predPos = v:GetNetworkOrigin() + v:GetVelocity() * predTime
-                    idiotbox.StartSimulation(v:EntIndex())
-                  
-                    for tick = 1, ib.TIME_TO_TICKS(predTime) do
-                        idiotbox.SimulateTick()
+	if gBool("Aim Assist", "Miscellaneous", "Disable Interpolation") then
+    		ded.NetSetConVar("cl_interpolate", "0")
+    		ded.NetSetConVar("cl_interp", "0")
     
-                        local data = idiotbox.GetSimulationData()
-                        debugoverlay.Line(predPos, data.m_vecAbsOrigin, 0.1, color_white, true)
+    		ded.SetCommandTick(
+        	cmd,
+        	math.floor(0.5 + ded.GetSimulationTime(v) / engine.TickInterval())
+    		)
+	else
+    		ded.NetSetConVar("cl_interpolate", "1")
+		--- These should work idk why there not so i commented them out. still disables pretty well so idk
+    		--ded.NetSetConVar("cl_interp", tostring(GetLerpTime()))
     
-                        predPos  = data.m_vecAbsOrigin
-                    end
-    
-                    local data = idiotbox.GetSimulationData()
-                    v:SetRenderOrigin(predPos)
-                    v:SetNetworkOrigin(predPos)
-    
-                    idiotbox.FinishSimulation()
-                    
-                 end
+    		--ded.SetCommandTick(
+        	--cmd,
+        	--math.floor(0.5 + (ded.GetSimulationTime(v) + GetLerpTime()) / engine.TickInterval())
+    		--)
+	end
+		--[[ !!FUTURE UPDATE!!
+		if gBool("Aim Assist", "Miscellaneous", "Fake Lag Prediction") then
+            local predTime =  (ded.GetLatency(0) + ded.GetLatency(1)) * 0.7 
+            local predPos = v:GetNetworkOrigin() + v:GetVelocity() * predTime
+            ded.StartSimulation(v:EntIndex())
+            for tick = 1, ib.timeToTicks(predTime) do
+                ded.SimulateTick()
+                local data = ded.GetSimulationData()
+                debugoverlay.Line(predPos, data.m_vecAbsOrigin, 0.1, color_white, true)
+                predPos  = data.m_vecAbsOrigin
+            end
+            local data = ded.GetSimulationData()
+            v:SetRenderOrigin(predPos)
+            v:SetNetworkOrigin(predPos)
+            ded.FinishSimulation()
+        end
+		!!FUTURE UPDATE!! ]]--
 	end
 	GetTarget()
     aa = false
@@ -5723,8 +5775,12 @@ local function Aimbot(cmd)
 	local fov = gInt("Aim Assist", "Aimbot", "Aim FoV Value:")
 	if fov == 0 then
 		aa = true
-		if gBool("Aim Assist", "Miscellaneous", "Remove Bullet Spread") then PredictSpread(cmd, ang) end
-		if gBool("Aim Assist", "Miscellaneous", "Remove Weapon Recoil") then ang:Sub(ib.CalculateAntiRecoil(wep)) end
+		if gBool("Aim Assist", "Miscellaneous", "Remove Bullet Spread") then 
+			PredictSpread(cmd, ang)
+		end
+		if gBool("Aim Assist", "Miscellaneous", "Remove Weapon Recoil") then
+			ang:Sub(ib.CalculateAntiRecoil(wep))
+		end
 		FixAngle(ang)
 		cmd:SetViewAngles(ang)
 		if (gBool("Aim Assist", "Aimbot", "Auto Fire")) then
@@ -5740,8 +5796,12 @@ local function Aimbot(cmd)
 		end
 	else
 	if not (ady > fov or adp > fov) then
-		if gBool("Aim Assist", "Miscellaneous", "Remove Bullet Spread") then PredictSpread(cmd, ang) end
-		if gBool("Aim Assist", "Miscellaneous", "Remove Weapon Recoil") then ang:Sub(ib.CalculateAntiRecoil(wep)) end
+		if gBool("Aim Assist", "Miscellaneous", "Remove Bullet Spread") then 
+			PredictSpread(cmd, ang)
+		end
+		if gBool("Aim Assist", "Miscellaneous", "Remove Weapon Recoil") then
+			ang:Sub(ib.CalculateAntiRecoil(wep))
+		end
 		FixAngle(ang)
 		cmd:SetViewAngles(ang)
         if (gBool("Aim Assist", "Aimbot", "Auto Fire")) then
@@ -5873,8 +5933,12 @@ local function Triggerbot(cmd)
 			ang = cm.GetViewAngles(cmd)
 		end
 		local wep = me:GetActiveWeapon()
-			if gBool("Aim Assist", "Miscellaneous", "Remove Bullet Spread") then PredictSpread(cmd, ang) end
-			if gBool("Aim Assist", "Miscellaneous", "Remove Weapon Recoil") then ang:Sub(ib.CalculateAntiRecoil(wep)) end
+		if gBool("Aim Assist", "Miscellaneous", "Remove Bullet Spread") then 
+			PredictSpread(cmd, ang)
+		end
+		if gBool("Aim Assist", "Miscellaneous", "Remove Weapon Recoil") then
+			ang:Sub(ib.CalculateAntiRecoil(wep))
+		end
 		FixAngle(ang)
 		cm.SetViewAngles(cmd, ang)
     end
@@ -5891,9 +5955,6 @@ local function RandCoin()
 	local randcoin = math.random(0, 1)
 	if (randcoin == 1) then return 1 else return - 1 end
 end
-
-local fakeAngles = {ox=0, oy=0}
-local realAngles = {ox=0, oy=0}
 
 local function GetClosestDistance()
 	local ddists = {}
@@ -5949,8 +6010,6 @@ local function LockView()
 	end
 end
 
-bSendPacket = global.bSendPacket
-
 local function Pitch()
 	local opt = gOption("Hack vs. Hack", "Anti-Aim", "Pitch:")
 	local randcoin = gInt("Hack vs. Hack", "Anti-Aim", "Emotion Pitch Speed:")
@@ -5962,28 +6021,46 @@ local function Pitch()
         ox = fa.x
 	elseif (opt == "Down") then
 		if gOption("Hack vs. Hack", "Anti-Aim", "Yaw:") == "Fake-Forwards" or gOption("Hack vs. Hack", "Anti-Aim", "Yaw:") == "Fake-Backwards" or gOption("Hack vs. Hack", "Anti-Aim", "Yaw:") == "Fake-Sideways" or gOption("Hack vs. Hack", "Anti-Aim", "Yaw:") == "Spinbot" then
-			ox = 120 + math.sin(CurTime() * 10) * 5
+			if gBool("Hack vs. Hack", "Anti-Aim", "Fake-Invert Pitch") then
+				ox = global.bSendPacket and 120 + math.sin(CurTime() * 10) * 5 or - 120 + math.sin(CurTime() * 10) * 5
+			elseif !gBool("Hack vs. Hack", "Anti-Aim", "Fake-Invert Pitch") then
+				ox = 120 + math.sin(CurTime() * 10) * 5
+			end
 		else
 			ox = 89
 		end
 	elseif (opt == "Up") then
 		if gOption("Hack vs. Hack", "Anti-Aim", "Yaw:") == "Fake-Forwards" or gOption("Hack vs. Hack", "Anti-Aim", "Yaw:") == "Fake-Backwards" or gOption("Hack vs. Hack", "Anti-Aim", "Yaw:") == "Fake-Sideways" or gOption("Hack vs. Hack", "Anti-Aim", "Yaw:") == "Spinbot" then
-			ox = - 120 - math.sin(CurTime() * 10) * 5
+			if gBool("Hack vs. Hack", "Anti-Aim", "Fake-Invert Pitch") then
+				ox = global.bSendPacket and - 120 - math.sin(CurTime() * 10) * 5 or 120 - math.sin(CurTime() * 10) * 5
+			elseif !gBool("Hack vs. Hack", "Anti-Aim", "Fake-Invert Pitch") then
+				ox = - 120 - math.sin(CurTime() * 10) * 5
+			end
 		else
 			ox = - 89
 		end
 	elseif (opt == "Center") then
 		if gOption("Hack vs. Hack", "Anti-Aim", "Yaw:") == "Fake-Forwards" or gOption("Hack vs. Hack", "Anti-Aim", "Yaw:") == "Fake-Backwards" or gOption("Hack vs. Hack", "Anti-Aim", "Yaw:") == "Fake-Sideways" or gOption("Hack vs. Hack", "Anti-Aim", "Yaw:") == "Spinbot" then
-			ox = 169 + math.sin(CurTime() * 3) * 5
+			if gBool("Hack vs. Hack", "Anti-Aim", "Fake-Invert Pitch") then
+				ox = global.bSendPacket and 169 + math.sin(CurTime() * 3) * 5 or - 169 + math.sin(CurTime() * 3) * 5
+			elseif !gBool("Hack vs. Hack", "Anti-Aim", "Fake-Invert Pitch") then
+				ox = 169 + math.sin(CurTime() * 3) * 5
+			end
 		else
 			ox = 0
 		end
 	elseif (opt == "Jitter") then
 		ox = math.random( - 89, 89)
 	elseif (opt == "Fake-Down") then
-		ox = bSendPacket and 89 or -89
+		ox = global.bSendPacket and 89 or - 89
+	elseif (opt == "Fake-Fake-Down") then
+		if global.bSendPacket then 
+		ox = 89 
+		else 
+		ox = 180.00000762939 -- weird number yea
+        	end
 	elseif (opt == "Fake-Up") then
-		ox = bSendPacket and -89 or 90
+		ox = global.bSendPacket and - 89 or 90
 	elseif (opt == "Semi-Jitter Down") then
 		ox = math.random(0, 89)
 	elseif (opt == "Semi-Jitter Up") then
@@ -5999,8 +6076,8 @@ local function Yaw()
 	local randcoin = gInt("Hack vs. Hack", "Anti-Aim", "Emotion Yaw Speed:")
 	local opt = gOption("Hack vs. Hack", "Anti-Aim", "Yaw:")
 	local default = gOption("Hack vs. Hack", "Anti-Aim", "Mode:") == "Default"
-	local distadapt = gOption("Hack vs. Hack", "Anti-Aim", "Mode:") == "Distance Adapt"
-	local crossadapt = gOption("Hack vs. Hack", "Anti-Aim", "Mode:") == "Crosshair Adapt"
+	local distadapt = gOption("Hack vs. Hack", "Anti-Aim", "Mode:") == "Follow Target VIA Distance"
+	local crossadapt = gOption("Hack vs. Hack", "Anti-Aim", "Mode:") == "Follow Target VIA Crosshair"
 	local static = gOption("Hack vs. Hack", "Anti-Aim", "Mode:") == "Static"
 	if (opt == "Off") then
         oy = fa.y
@@ -6024,6 +6101,30 @@ local function Yaw()
 		oy = GetClosestCrosshair() - 180
 	elseif (opt == "Backwards" && static) then
 		oy = 0
+	elseif (opt == "Tank AA" && default) then
+		if global.bSendPacket then 
+		oy = fa.y + 89 
+		else 
+		oy = fa.y + 189
+        	end
+	elseif (opt == "Tank AA" && static) then
+		if global.bSendPacket then 
+		oy = 89 
+		else 
+		oy = 189
+        	end
+	elseif (opt == "Tank AA" && crossadapt) then
+		if global.bSendPacket then 
+		oy = GetClosestCrosshair() + 89 
+		else 
+		oy = GetClosestCrosshair() + 189
+        	end
+	elseif (opt == "Tank AA" && distadapt) then
+		if global.bSendPacket then 
+		oy = GetClosestDistance() + 89 
+		else 
+		oy = GetClosestDistance() + 189
+        	end
 	elseif (opt == "Jitter" && default) then
 		oy = fa.y + math.random( - 90, 90)
 	elseif (opt == "Jitter" && distadapt) then
@@ -6043,21 +6144,21 @@ local function Yaw()
 	elseif (opt == "Side Switch") then
 		oy = math.random( - 631, 631)
 	elseif (opt == "Semi-Jitter" && default) then
-		oy = fa.y + math.random (25, - 25)
+		oy = fa.y + math.random(25, - 25)
 	elseif (opt == "Semi-Jitter" && distadapt) then
-		oy = GetClosestDistance() + math.random (25, - 25)
+		oy = GetClosestDistance() + math.random(25, - 25)
 	elseif (opt == "Semi-Jitter" && crossadapt) then
-		oy = GetClosestCrosshair() + math.random (25, - 25)
+		oy = GetClosestCrosshair() + math.random(25, - 25)
 	elseif (opt == "Semi-Jitter" && static) then
-		oy = 180 + math.random (25, - 25)
+		oy = 180 + math.random(25, - 25)
 	elseif (opt == "Back Semi-Jitter" && default) then
-		oy = fa.y - 180 + math.random (25, - 25)
+		oy = fa.y - 180 + math.random(25, - 25)
 	elseif (opt == "Back Semi-Jitter" && distadapt) then
-		oy = GetClosestDistance() - 180 + math.random (25, - 25)
+		oy = GetClosestDistance() - 180 + math.random(25, - 25)
 	elseif (opt == "Back Semi-Jitter" && crossadapt) then
-		oy = GetClosestCrosshair() - 180 + math.random (25, - 25)
+		oy = GetClosestCrosshair() - 180 + math.random(25, - 25)
 	elseif (opt == "Back Semi-Jitter" && static) then
-		oy = 0 + math.random (25, - 25)
+		oy = 0 + math.random(25, - 25)
 	elseif (opt == "Spinbot") then
 		if left then
         oy = (global.CurTime() * gInt("Hack vs. Hack", "Anti-Aim", "Spinbot Yaw Speed:") * 23) % 350, 1
@@ -6074,7 +6175,7 @@ local function Yaw()
 		elseif left then
 		oy = fa.y + 90
 		elseif manual then
-		oy = fa.y - 90 
+		oy = fa.y - 90
 		else
 		oy = fa.y + 90
 	end
@@ -6084,7 +6185,7 @@ local function Yaw()
 		elseif left then
 		oy = GetClosestDistance() + 90
 		elseif manual then
-		oy = GetClosestDistance() - 90 
+		oy = GetClosestDistance() - 90
 		else
 		oy = GetClosestDistance() + 90
 	end
@@ -6102,7 +6203,7 @@ local function Yaw()
 		if right then
 		oy = 90
 		elseif left then
-		oy = 270 
+		oy = 270
 		elseif manual then
 		oy = 90
 		else
@@ -6190,152 +6291,126 @@ local function Yaw()
 	    end
 	elseif (opt == "Fake-Forwards" && default) then
 		if left then
-        oy = bSendPacket and fa.y - math.sin(CurTime() * 10) * 5 or fa.y - 180
+        oy = global.bSendPacket and fa.y + math.sin(CurTime() * 10) * 5 or fa.y - 180 - math.sin(CurTime() * 10) * 5
         elseif right then
-        oy = bSendPacket and fa.y + math.sin(CurTime() * 10) * 5 or fa.y - 180
+        oy = global.bSendPacket and fa.y - math.sin(CurTime() * 10) * 5 or fa.y - 180 + math.sin(CurTime() * 10) * 5
 		elseif manual then
-		oy = fa.y + math.sin(CurTime() * 10) * 5
+		oy = global.bSendPacket and fa.y - math.sin(CurTime() * 10) * 5 or fa.y - 180 + math.sin(CurTime() * 10) * 5
 		else
-		oy = fa.y - math.sin(CurTime() * 10) * 5
+		oy = global.bSendPacket and fa.y + math.sin(CurTime() * 10) * 5 or fa.y - 180 - math.sin(CurTime() * 10) * 5
         end
 	elseif (opt == "Fake-Forwards" && distadapt) then
         if left then
-        oy = bSendPacket and GetClosestDistance() - math.sin(CurTime() * 10) * 5 or GetClosestDistance() - 180
+        oy = global.bSendPacket and GetClosestDistance() + math.sin(CurTime() * 10) * 5 or GetClosestDistance() - 180 - math.sin(CurTime() * 10) * 5
         elseif right then
-        oy = bSendPacket and GetClosestDistance() + math.sin(CurTime() * 10) * 5 or GetClosestDistance() - 180
+        oy = global.bSendPacket and GetClosestDistance() - math.sin(CurTime() * 10) * 5 or GetClosestDistance() - 180 + math.sin(CurTime() * 10) * 5
 		elseif manual then
-		oy = GetClosestDistance() + math.sin(CurTime() * 10) * 5
+		oy = global.bSendPacket and GetClosestDistance() - math.sin(CurTime() * 10) * 5 or GetClosestDistance() - 180 + math.sin(CurTime() * 10) * 5
 		else
-		oy = GetClosestDistance() - math.sin(CurTime() * 10) * 5
+		oy = global.bSendPacket and GetClosestDistance() + math.sin(CurTime() * 10) * 5 or GetClosestDistance() - 180 - math.sin(CurTime() * 10) * 5
         end
 	elseif (opt == "Fake-Forwards" && crossadapt) then
         if left then
-        oy = bSendPacket and GetClosestCrosshair() - math.sin(CurTime() * 10) * 5 or GetClosestDistance() - 180
+        oy = global.bSendPacket and GetClosestCrosshair() + math.sin(CurTime() * 10) * 5 or GetClosestCrosshair() - 180 - math.sin(CurTime() * 10) * 5
         elseif right then
-        oy = bSendPacket and GetClosestCrosshair() + math.sin(CurTime() * 10) * 5 or GetClosestDistance() - 180
+        oy = global.bSendPacket and GetClosestCrosshair() - math.sin(CurTime() * 10) * 5 or GetClosestCrosshair() - 180 + math.sin(CurTime() * 10) * 5
 		elseif manual then
-		oy = GetClosestCrosshair() + math.sin(CurTime() * 10) * 5
+		oy = global.bSendPacket and GetClosestCrosshair() - math.sin(CurTime() * 10) * 5 or GetClosestCrosshair() - 180 + math.sin(CurTime() * 10) * 5
 		else
-		oy = GetClosestCrosshair() - math.sin(CurTime() * 10) * 5
+		oy = global.bSendPacket and GetClosestCrosshair() + math.sin(CurTime() * 10) * 5 or GetClosestCrosshair() - 180 - math.sin(CurTime() * 10) * 5
         end
 	elseif (opt == "Fake-Forwards" && static) then
         if left then
-        oy = bSendPacket and 180 - math.sin(CurTime() * 10) * 5 or - 0
+        oy = global.bSendPacket and 180 + math.sin(CurTime() * 10) * 5 or - 0 - math.sin(CurTime() * 10) * 5
         elseif right then
-        oy = bSendPacket and 180 + math.sin(CurTime() * 10) * 5 or - 0
+        oy = global.bSendPacket and 180 - math.sin(CurTime() * 10) * 5 or - 0 + math.sin(CurTime() * 10) * 5
 		elseif manual then
-		oy = 180 + math.sin(CurTime() * 10) * 5
+		oy = global.bSendPacket and 180 - math.sin(CurTime() * 10) * 5 or - 0 + math.sin(CurTime() * 10) * 5
 		else
-		oy = 180 - math.sin(CurTime() * 10) * 5
+		oy = global.bSendPacket and 180 + math.sin(CurTime() * 10) * 5 or - 0 - math.sin(CurTime() * 10) * 5
         end
 	elseif (opt == "Fake-Backwards" && default) then
 		if right then
-		oy = bSendPacket and fa.y + 180 + math.sin(CurTime() * 10) * 5 or fa.y + 0
+		oy = global.bSendPacket and fa.y + 180 + math.sin(CurTime() * 10) * 5 or fa.y + 0 - math.sin(CurTime() * 10) * 5
 		elseif left then
-		oy = bSendPacket and fa.y + 180 - math.sin(CurTime() * 10) * 5 or fa.y + 0
+		oy = global.bSendPacket and fa.y + 180 - math.sin(CurTime() * 10) * 5 or fa.y + 0 + math.sin(CurTime() * 10) * 5
 		elseif manual then
-		oy = fa.y + 180 + math.sin(CurTime() * 10) * 5
+		oy = global.bSendPacket and fa.y + 180 - math.sin(CurTime() * 10) * 5 or fa.y + 0 + math.sin(CurTime() * 10) * 5
 		else
-		oy = fa.y + 180 - math.sin(CurTime() * 10) * 5
+		oy = global.bSendPacket and fa.y + 180 + math.sin(CurTime() * 10) * 5 or fa.y + 0 - math.sin(CurTime() * 10) * 5
 		end
 	elseif (opt == "Fake-Backwards" && distadapt) then
 		if right then
-		oy = bSendPacket and GetClosestDistance() + 180 + math.sin(CurTime() * 10) * 5 or GetClosestDistance() - 0
+		oy = global.bSendPacket and GetClosestDistance() + 180 + math.sin(CurTime() * 10) * 5 or GetClosestDistance() - 0 - math.sin(CurTime() * 10) * 5
 		elseif left then
-		oy = bSendPacket and GetClosestDistance() + 180 - math.sin(CurTime() * 10) * 5 or GetClosestDistance() - 0
+		oy = global.bSendPacket and GetClosestDistance() + 180 - math.sin(CurTime() * 10) * 5 or GetClosestDistance() - 0 + math.sin(CurTime() * 10) * 5
 		elseif manual then
-		oy = GetClosestDistance() + 180 + math.sin(CurTime() * 10) * 5
+		oy = global.bSendPacket and GetClosestDistance() + 180 - math.sin(CurTime() * 10) * 5 or GetClosestDistance() - 0 + math.sin(CurTime() * 10) * 5
 		else
-		oy = GetClosestDistance() + 180 - math.sin(CurTime() * 10) * 5
+		oy = global.bSendPacket and GetClosestDistance() + 180 + math.sin(CurTime() * 10) * 5 or GetClosestDistance() - 0 - math.sin(CurTime() * 10) * 5
 		end
 	elseif (opt == "Fake-Backwards" && crossadapt) then
 		if right then
-		oy = bSendPacket and GetClosestCrosshair() + 180 + math.sin(CurTime() * 10) * 5 or GetClosestDistance() - 0
+		oy = global.bSendPacket and GetClosestCrosshair() + 180 + math.sin(CurTime() * 10) * 5 or GetClosestCrosshair() - 0 - math.sin(CurTime() * 10) * 5
 		elseif left then
-		oy = bSendPacket and GetClosestCrosshair() + 180 - math.sin(CurTime() * 10) * 5 or GetClosestDistance() - 0
+		oy = global.bSendPacket and GetClosestCrosshair() + 180 - math.sin(CurTime() * 10) * 5 or GetClosestCrosshair() - 0 + math.sin(CurTime() * 10) * 5
 		elseif manual then
-		oy = GetClosestCrosshair() + 180 + math.sin(CurTime() * 10) * 5
+		oy = global.bSendPacket and GetClosestCrosshair() + 180 - math.sin(CurTime() * 10) * 5 or GetClosestCrosshair() - 0 + math.sin(CurTime() * 10) * 5
 		else
-		oy = GetClosestCrosshair() + 180 - math.sin(CurTime() * 10) * 5
+		oy = global.bSendPacket and GetClosestCrosshair() + 180 + math.sin(CurTime() * 10) * 5 or GetClosestCrosshair() - 0 - math.sin(CurTime() * 10) * 5
 		end
 	elseif (opt == "Fake-Backwards" && static) then
 		if right then
-		oy = bSendPacket and 0 + math.sin(CurTime() * 10) * 5 or 180
+		oy = global.bSendPacket and 0 + math.sin(CurTime() * 10) * 5 or 180 - math.sin(CurTime() * 10) * 5
 		elseif left then
-		oy = bSendPacket and 0 - math.sin(CurTime() * 10) * 5 or 180
+		oy = global.bSendPacket and 0 - math.sin(CurTime() * 10) * 5 or 180 + math.sin(CurTime() * 10) * 5
 		elseif manual then
-		oy = 0 + math.sin(CurTime() * 10) * 5
+		oy = global.bSendPacket and 0 - math.sin(CurTime() * 10) * 5 or 180 + math.sin(CurTime() * 10) * 5
 		else
-		oy = 0 - math.sin(CurTime() * 10) * 5
+		oy = global.bSendPacket and 0 + math.sin(CurTime() * 10) * 5 or 180 - math.sin(CurTime() * 10) * 5
 		end
 	elseif (opt == "Fake-Sideways" && default) then
 		if left then
-        oy = bSendPacket and fa.y + 90 + math.sin(CurTime() * 10) * 5 or fa.y - 90 + math.sin(CurTime() * 10) * 5
+        oy = global.bSendPacket and fa.y + 90 + math.sin(CurTime() * 10) * 5 or fa.y - 90 + math.sin(CurTime() * 10) * 5
    		elseif right then
-        oy = bSendPacket and fa.y - 90 + math.sin(CurTime() * 10) * 5 or fa.y + 90 + math.sin(CurTime() * 10) * 5
+        oy = global.bSendPacket and fa.y - 90 + math.sin(CurTime() * 10) * 5 or fa.y + 90 + math.sin(CurTime() * 10) * 5
 		elseif manual then
-		oy = fa.y - 90 - math.sin(CurTime() * 10) * 5
+		oy = global.bSendPacket and fa.y - 90 + math.sin(CurTime() * 10) * 5 or fa.y + 90 + math.sin(CurTime() * 10) * 5
 		else
-		oy = fa.y + 90 + math.sin(CurTime() * 10) * 5
+		oy = global.bSendPacket and fa.y + 90 + math.sin(CurTime() * 10) * 5 or fa.y - 90 + math.sin(CurTime() * 10) * 5
 	    end
 	elseif (opt == "Fake-Sideways" && distadapt) then
 		if left then
-        oy = bSendPacket and GetClosestDistance() + 90 + math.sin(CurTime() * 10) * 5 or GetClosestDistance() - 90 + math.sin(CurTime() * 10) * 5
+        oy = global.bSendPacket and GetClosestDistance() + 90 + math.sin(CurTime() * 10) * 5 or GetClosestDistance() - 90 + math.sin(CurTime() * 10) * 5
    		elseif right then
-        oy = bSendPacket and GetClosestDistance() - 90 + math.sin(CurTime() * 10) * 5 or GetClosestDistance() + 90 + math.sin(CurTime() * 10) * 5
+        oy = global.bSendPacket and GetClosestDistance() - 90 + math.sin(CurTime() * 10) * 5 or GetClosestDistance() + 90 + math.sin(CurTime() * 10) * 5
 		elseif manual then
-		oy = GetClosestDistance() - 90 - math.sin(CurTime() * 10) * 5
+		oy = global.bSendPacket and GetClosestDistance() - 90 + math.sin(CurTime() * 10) * 5 or GetClosestDistance() + 90 + math.sin(CurTime() * 10) * 5
 		else
-		oy = GetClosestDistance() + 90 + math.sin(CurTime() * 10) * 5
+		oy = global.bSendPacket and GetClosestDistance() + 90 + math.sin(CurTime() * 10) * 5 or GetClosestDistance() - 90 + math.sin(CurTime() * 10) * 5
 	    end
 	elseif (opt == "Fake-Sideways" && crossadapt) then
 		if left then
-        oy = bSendPacket and GetClosestCrosshair() + 90 + math.sin(CurTime() * 10) * 5 or GetClosestDistance() - 90 + math.sin(CurTime() * 10) * 5
+        oy = global.bSendPacket and GetClosestCrosshair() + 90 + math.sin(CurTime() * 10) * 5 or GetClosestCrosshair() - 90 + math.sin(CurTime() * 10) * 5
    		elseif right then
-        oy = bSendPacket and GetClosestCrosshair() - 90 + math.sin(CurTime() * 10) * 5 or GetClosestDistance() + 90 + math.sin(CurTime() * 10) * 5
+        oy = global.bSendPacket and GetClosestCrosshair() - 90 + math.sin(CurTime() * 10) * 5 or GetClosestCrosshair() + 90 + math.sin(CurTime() * 10) * 5
 		elseif manual then
-		oy = GetClosestCrosshair() - 90 - math.sin(CurTime() * 10) * 5
+		oy = global.bSendPacket and GetClosestCrosshair() - 90 + math.sin(CurTime() * 10) * 5 or GetClosestCrosshair() + 90 + math.sin(CurTime() * 10) * 5
 		else
-		oy = GetClosestCrosshair() + 90 + math.sin(CurTime() * 10) * 5
+		oy = global.bSendPacket and GetClosestCrosshair() + 90 + math.sin(CurTime() * 10) * 5 or GetClosestCrosshair() - 90 + math.sin(CurTime() * 10) * 5
 	    end
 	elseif (opt == "Fake-Sideways" && static) then
 		if left then
-        oy = bSendPacket and 270 + math.sin(CurTime() * 10) * 5 or -270 + math.sin(CurTime() * 10) * 5 
+        oy = global.bSendPacket and 270 + math.sin(CurTime() * 10) * 5 or - 270 + math.sin(CurTime() * 10) * 5 
    		elseif right then
-        oy = bSendPacket and -270 + math.sin(CurTime() * 10) * 5 or 270 + math.sin(CurTime() * 10) * 5 
+        oy = global.bSendPacket and - 270 + math.sin(CurTime() * 10) * 5 or 270 + math.sin(CurTime() * 10) * 5 
 		elseif manual then
-		oy = - 270 - math.sin(CurTime() * 10) * 5
+		oy = global.bSendPacket and - 270 + math.sin(CurTime() * 10) * 5 or 270 + math.sin(CurTime() * 10) * 5 
 		else
-		oy = 270 + math.sin(CurTime() * 10) * 5
+		oy = global.bSendPacket and 270 + math.sin(CurTime() * 10) * 5 or - 270 + math.sin(CurTime() * 10) * 5 
 	    end
-	--[[ !!FUTURE UPDATE!!
-	elseif (opt == "Fake Angles" && default) then
-		if bSendPacket then
-		oy = fa.y + 115
-		else
-		oy = fa.y - 115
-		end
-	elseif (opt == "Fake Angles" && distadapt) then
-		if bSendPacket then
-		oy = GetClosestDistance() + 115
-		else
-		oy = GetClosestDistance() - 115
-		end
-	elseif (opt == "Fake Angles" && crossadapt) then
-		if bSendPacket then
-		oy = GetClosestCrosshair() + 115
-		else
-		oy = GetClosestCrosshair() - 115
-		end
-	elseif (opt == "Fake Angles" && static) then
-		if bSendPacket then
-		oy = 115
-		else
-		oy = - 115
-		end
-	!!FUTURE UPDATE!! ]]--
 	end
-    if bSendPacket then 
+	if global.bSendPacket then 
         fakeAngles.ox = ox
         fakeAngles.oy = oy
     else
@@ -6380,48 +6455,31 @@ local function AntiAim(cmd)
 	DetectWalls()
 	local aaang = Angle(ox, oy, 0)
 	cm.SetViewAngles(cmd, aaang)
-	FixMovement(cmd, true)
+	if !gKey("Aim Assist", "Aimbot", "Toggle Key:") then
+	FixMovement(cmd)
+	end
 end
 
-
-function LagExploit(cmd)
-    if bSendPacket and gBool("Hack vs. Hack", "Miscellaneous", "Lag Exploit") then
-        if math.floor(1 / engine.TickInterval()) - 3 > 0 then
-            if not bRunning then
-                idiotbox.SetOutSequenceNr(idiotbox.GetOutSequenceNr() + (math.floor(1 / engine.TickInterval()) - 3))
-                bRunning = true
-            else
-                idiotbox.SetNetChokedPackets(127)
-            end
-        else
-            bRunning = false
-        end
-    end
-end
-
-
-
-
-hook.Add('PreRender', "angles", function() -- S0lum Code
+hook.Add("PreRender", "PreRender", function() -- S0lum code B)))
         if aaply1 == NULL and gBool("Hack vs. Hack", "Anti-Aim", "Enabled") then aaply1 = ClientsideModel(me:GetModel(),1) end
-        if gBool("Hack vs. Hack", "Fake Lag", "Enabled") and gBool("Hack vs. Hack", "Anti-Aim", "Enabled") then
-        aaply1:SetNoDraw(true)
-        aaply1:SetSequence(me:GetSequence())
-        aaply1:SetCycle(me:GetCycle())
-        if me:Alive() then
-            aaply1:SetModel(me:GetModel())
-            aaply1:SetPos(me:GetPos())
-            aaply1:SetAngles(Angle(0,fakeAngles.oy,0))
-            aaply1:SetPoseParameter("aim_pitch",fakeAngles.ox)
-            aaply1:SetPoseParameter("move_x",me:GetPoseParameter("move_x"))
-            aaply1:SetPoseParameter("move_y",me:GetPoseParameter("move_y"))
-            aaply1:SetPoseParameter("head_pitch",fakeAngles.ox)
-            aaply1:SetPoseParameter("body_yaw",fakeAngles.oy)
-            aaply1:SetPoseParameter("aim_yaw",0)
-            aaply1:InvalidateBoneCache()
-            aaply1:SetRenderAngles(Angle(0,fakeAngles.oy, 0))
-        end
-        if aaply2 == NULL and gBool("Hack vs. Hack", "Fake Lag", "Enabled") then aaply2 = ClientsideModel(me:GetModel(),1) end
+        if gBool("Hack vs. Hack", "Anti-Aim", "Enabled") then
+			aaply1:SetNoDraw(true)
+			aaply1:SetSequence(me:GetSequence())
+			aaply1:SetCycle(me:GetCycle())
+			if me:Alive() then
+				aaply1:SetModel(me:GetModel())
+				aaply1:SetPos(me:GetPos())
+				aaply1:SetAngles(Angle(0,fakeAngles.oy,0))
+				aaply1:SetPoseParameter("aim_pitch",fakeAngles.ox)
+				aaply1:SetPoseParameter("move_x",me:GetPoseParameter("move_x"))
+				aaply1:SetPoseParameter("move_y",me:GetPoseParameter("move_y"))
+				aaply1:SetPoseParameter("head_pitch",fakeAngles.ox)
+				aaply1:SetPoseParameter("body_yaw",fakeAngles.oy)
+				aaply1:SetPoseParameter("aim_yaw",0)
+				aaply1:InvalidateBoneCache()
+				aaply1:SetRenderAngles(Angle(0,fakeAngles.oy, 0))
+			end
+        if aaply2 == NULL and gBool("Hack vs. Hack", "Anti-Aim", "Enabled") then aaply2 = ClientsideModel(me:GetModel(),1) end
         aaply2:SetNoDraw(true)
         aaply2:SetSequence(me:GetSequence())
         aaply2:SetCycle(me:GetCycle())
@@ -6438,17 +6496,15 @@ hook.Add('PreRender', "angles", function() -- S0lum Code
             aaply2:InvalidateBoneCache()
             aaply2:SetRenderAngles(Angle(0,realAngles.oy,0))
         end
-  end
+    end
 end)
 
-
-
-
 local function FakeLag(cmd)
+	if gBool("Miscellaneous", "Movement", "Air Stuck") and gKey("Miscellaneous", "Movement", "Air Stuck Key:") then return end
     local curvel = me:GetVelocity():Length2D()
     local dst_per_tick = curvel * engine.TickInterval()
     local chokes = math.ceil(64 / dst_per_tick)
-    chokes = math.Clamp(chokes, 1, 14)
+    chokes = math.Clamp(chokes, 1, 21)
 	if gOption("Hack vs. Hack", "Fake Lag", "Lag Type:") == "Normal" then
         fakelagfactor = gInt("Hack vs. Hack", "Fake Lag", "Lag Factor:")
     elseif gOption("Hack vs. Hack", "Fake Lag", "Lag Type:") == "Adaptive" then
@@ -6466,7 +6522,7 @@ local function FakeLag(cmd)
             fakelagticks = fakelagticks - 1
         end
     end
-	idiotbox.SetBSendPacket(global.bSendPacket)
+	ded.SetBSendPacket(global.bSendPacket)
 end
 
 local function PropKill(cmd)
@@ -6487,7 +6543,6 @@ local function PropKill(cmd)
 		end
 		local aaang = Angle(ox, oy, 0)
 		cm.SetViewAngles(cmd, aaang)
-		FixMovement(cmd, true)
 	else
 		if ib.propval > 0 then
 			ib.propval = 0
@@ -6498,7 +6553,6 @@ local function PropKill(cmd)
 			oy = fa.y
 			local aaang = Angle(ox, oy, 0)
 			cm.SetViewAngles(cmd, aaang)
-			FixMovement(cmd, true)
 		else
 			ib.propdelay = 0
 		end
@@ -6515,11 +6569,15 @@ function ib.LaserBullets(cmd)
 			ang = cm.GetViewAngles(cmd)
 		end
 		local wep = me:GetActiveWeapon()
-		if me:GetActiveWeapon():IsValid() and me:Alive() and me:Health() > 0 then
-			if gBool("Aim Assist", "Miscellaneous", "Remove Bullet Spread") then PredictSpread(cmd, ang) end
-			if gBool("Aim Assist", "Miscellaneous", "Remove Weapon Recoil") then ang:Sub(ib.CalculateAntiRecoil(wep)) end
-		FixAngle(ang)
-		cm.SetViewAngles(cmd, ang)
+		if wep:IsValid() then
+			if gBool("Aim Assist", "Miscellaneous", "Remove Bullet Spread") then 
+				PredictSpread(cmd, ang)
+			end
+			if gBool("Aim Assist", "Miscellaneous", "Remove Weapon Recoil") then
+				ang:Sub(ib.CalculateAntiRecoil(wep))
+			end
+			FixAngle(ang)
+			cm.SetViewAngles(cmd, ang)
 		end
     end
 end
@@ -6654,47 +6712,79 @@ end)
 hook.Add("ShouldDrawLocalPlayer", "ShouldDrawLocalPlayer", function()
 	if not ib.FreeRoamCheck() then return ThirdpersonCheck() end
 end)
-local function FreeStanding(cmd)
-    if gBool("Hack vs. Hack", "Miscellaneous", "Free Standing") then 
-        if !cmd:KeyDown(IN_BACK) and !cmd:KeyDown(IN_FORWARD) and !cmd:KeyDown(IN_LEFT) and !cmd:KeyDown(IN_RIGHT) then
-            cmd:SetSideMove(side and -180 or 180)
-            side = !side
-        end
-    end
-end
 
 function ib.AirStuck(cmd)
-	if gBool("Miscellaneous", "Movement", "Air Stuck") then
-		if gKey("Miscellaneous", "Movement", "Air Stuck Key:") then
-			idiotbox.SetOutSequenceNr(idiotbox.GetOutSequenceNr() + gInt("Miscellaneous", "Movement", "Air Stuck Value:"))
+	if !gBool("Hack vs. Hack", "Fake Lag", "Enabled") and gBool("Miscellaneous", "Movement", "Air Stuck") and gKey("Miscellaneous", "Movement", "Air Stuck Key:") then
+		ded.SetOutSequenceNr(ded.GetOutSequenceNr() + gInt("Miscellaneous", "Movement", "Air Stuck Value:"))
+	end
+end
+
+function ib.LagDesyncCheck()
+	if gBool("Hack vs. Hack", "Fake Lag", "Lag Desync") then
+		if gKey("Hack vs. Hack", "Fake Lag", "Lag Desync Key:") and not ib.desyncpressed then
+			ib.desyncpressed = true
+			ib.desynctoggle = not ib.desynctoggle
+		elseif not gKey("Hack vs. Hack", "Fake Lag", "Lag Desync Key:") and ib.desyncpressed then
+			ib.desyncpressed = false
+		end
+		if ib.desynctoggle then
+			return true
+		else
+			return false
 		end
 	end
 end
 
+function ib.LagDesync(cmd)
+	local tickrate = math.floor(1 / engine.TickInterval())
+	local seqshift =  tickrate - 3
+    if global.bSendPacket and ib.LagDesyncCheck() then
+        if seqshift > 0 then
+            if not bRunning then
+                ded.SetOutSequenceNr(ded.GetOutSequenceNr() + seqshift)
+                bRunning = true
+            else
+                ded.SetNetChokedPackets(127)
+            end
+        else
+            bRunning = false
+        end
+    end
+end
+
+function ib.PingSpoofer(cmd)
+	if gBool("Main Menu", "Miscellaneous", "Ping Spoofer") then
+		ded.SetInSequenceNr(ded.GetInSequenceNr() +- gInt("Main Menu", "Miscellaneous", "Spoof Multiplier:"))
+	end
+end
+
 hook.Add("CreateMove", "CreateMove", function(cmd)
-    global.bSendPacket = true
+	global.bSendPacket = true
+	ib.AirStuck(cmd)
+	ib.LagDesync(cmd)
+    ib.LaserBullets(cmd)
+	ib.PingSpoofer(cmd)
+	ib.MultiTap(cmd)
     FakeAngles(cmd)
+    ded.SetInterpolation( not gBool("Aim Assist", "Miscellaneous", "Disable Interpolation") )
+    ded.SetSequenceInterpolation( not gBool("Aim Assist", "Miscellaneous", "Disable Interpolation") )
     FakeLag(cmd)
-    LagExploit(cmd)
     AntiAFK(cmd)
     BunnyHop(cmd)
     AutoStrafe(cmd)
     FreeRoam(cmd)
     AutoReload(cmd)
     AntiAim(cmd)
-    FreeStanding(cmd)
     RapidPrimaryFire(cmd)
     RapidAltFire(cmd)
     FakeCrouch(cmd)
     AirCrouch(cmd)
     PropKill(cmd)
     if cm.CommandNumber(cmd) == 0 then return end
-    ib.AirStuck(cmd)
-    ib.LaserBullets(cmd)
-    idiotbox.StartPrediction(cmd)
+    ded.StartPrediction(cmd)
     Aimbot(cmd)
     Triggerbot(cmd)
-    idiotbox.FinishPrediction()
+    ded.FinishPrediction()
 end)
 
 hook.Add("player_disconnect", "player_disconnect", function(v, data)
@@ -6844,7 +6934,7 @@ function ib.FovCircle()
 	end
 end
 
-hook.Add("MiscPaint", "MiscPaint", function()
+hook.Add("HUDPaint", "HUDPaint", function()
 	if gBool("Visuals", "Wallhack", "Enabled") then
 		for k, v in next, player.GetAll() do
 		if not em.IsValid(v) or ((!(ThirdpersonCheck() and gOption("Visuals", "Wallhack", "Visibility:") == "Clientside") and v == me) or (gOption("Visuals", "Wallhack", "Visibility:") == "Global" and v == me) or em.Health(v) < 0.1 or (em.IsDormant(v) and (gOption("Visuals", "Miscellaneous", "Dormant Check:") == "Players" or gOption("Visuals", "Miscellaneous", "Dormant Check:") == "Entities" or gOption("Visuals", "Miscellaneous", "Dormant Check:") == "All")) or (pm.Team(v) == TEAM_SPECTATOR and not gBool("Visuals", "Miscellaneous", "Show Spectators"))) or not WallhackFilter(v) or not EnemyWallhackFilter(v) then continue end
@@ -6969,6 +7059,8 @@ hook.Add("PreDrawOpaqueRenderables", "PreDrawOpaqueRenderables", function()
 	end
 end)
 
+
+
 hook.Add("OnPlayerChat", "OnPlayerChat", function(chatPlayer, text, teamChat)
 	local randomresponse = {"shut up", "ok", "who", "nobody cares", "where", "stop spamming", "what", "yea", "lol", "english please", "lmao", "shit", "fuck",}
 	local cheatcallouts = {"hac", "h4c", "h@c", "hak", "h4k", "h@k", "hck", "hax", "h4x", "h@x", "hask", "h4sk", "h@sk", "ha$k", "cheat", "ch3at", "che4t", "che@t", "chet", "ch3t", "wall", "w4ll", "w@ll", "wa11", "w@11", "w411", "aim", "a1m", "4im", "@im", "trigg", "tr1gg", "spin", "sp1n", "bot", "b0t", "esp", "3sp", "e$p", "script", "skript", "$cript", "$kript", "scr1pt", "skr1pt", "$cr1pt", "$kr1pt", "skid", "sk1d", "$kid", "$k1d", "bunny", "buny", "h0p", "hop", "kick", "k1ck", "kik", "k1k", "ban", "b4n", "b@n", "fake", "f4ke", "f@ke", "fak3", "f4k3", "f@k3",}
@@ -6985,9 +7077,9 @@ hook.Add("OnPlayerChat", "OnPlayerChat", function(chatPlayer, text, teamChat)
                 for _, callout in next, cheatcallouts do
                     if string.find(lowertext, callout) then
                         if engine.ActiveGamemode() == "darkrp" then
-                            idiotbox.NetSendMsgIdiotBox("say :"..string.rep("\n", 255).."")
+                            ded.NetSendMessage("say /ooc "..string.rep("\n", 255).."")
                         else
-                            idiotbox.NetSendMsgIdiotBox("say /ooc "..string.rep("\n", 255).."")
+                            ded.NetSendMessage("say :"..string.rep("\n", 255).."")
                         end
                     end
                 end
@@ -7006,12 +7098,6 @@ timer.Simple(0.2, function()
 		chat.AddText(Color(255, 255, 0), "We recommend setting your game resolution to 1920x1080 for the best user experience.")
 		surface.PlaySound("buttons/lightswitch2.wav")
 	end
-end)
-
-timer.Simple(0.1, function()
-	chat.AddText(Color(255, 255, 0), "Attention! The backup version does not receive automatic updates.")
-	chat.AddText(Color(255, 255, 0), "Check for updates through our official website, Steam group or Discord server.")
-	surface.PlaySound("buttons/lightswitch2.wav")
 end)
 
 timer.Simple(0.1, function()
