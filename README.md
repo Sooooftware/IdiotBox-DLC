@@ -1,5 +1,13 @@
-Idiotbox with New Module Features
+Idiotbox with New Zxcmodule Features
 
-Planning on Rewriting A lot of the original code. This will no longer be for professional "use" and will be for Raw Power 
+Updated as of April 26th 2026 (
+Fixed for newest zxcmodule
+Added proper no interpolation
+Added Tank AA
+Added Fake-Fake Down (both with actual fake angles)
+Fixed Fixmovement with AA plus Aimbot
+Reworked Fakelag
+Did some optimizing
+)
 
-Goodbye Undetectable Hello top 5 Rage Cheat! (EST Mid-Late 2026)
+Future will add extrapolation fl pred and a bunch more.
